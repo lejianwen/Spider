@@ -9,6 +9,8 @@ class Spider
     protected $all_queue;
     protected $config = [];
     protected $html_parse;
+    protected $status;
+    protected $task_id;
 
     public function __construct($config)
     {
@@ -35,7 +37,7 @@ class Spider
     public function ready()
     {
         if (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0) {
-            $msg = "Found data in Redis, continue? no will clean data, default is yes \n";
+            $msg = "Old data in Redis, continue? no will clean data, default is yes \n";
             $msg .= 'continue? [Y/n]';
             fwrite(STDOUT, $msg);
             $arg = strtolower(trim(fgets(STDIN)));
@@ -74,6 +76,8 @@ class Spider
                         }
                     }*/
                 } else {
+                    $this->task_id = $i;
+                    echo "$this->task_id start \n";
                     $this->task();
                     break;
                 }
@@ -86,6 +90,10 @@ class Spider
     public function task()
     {
         Redis::_instance()->disConnect();
+        $this->status = new Status('redis', 1, $this->task_id);
+        Log::$task_id = $this->task_id;
+        $this->upTaskStatus('start_time', microtime(true));
+
         $request = new Request($this->config['guzzle'] ?? []);
         if (isset($this->config['multi_num']) && $this->config['multi_num'] > 1) {
             while (1) {
@@ -114,6 +122,7 @@ class Spider
                 foreach ($responses as $url => $response) {
                     $this->response($url, $response);
                 }
+                $this->upTaskStatus('memory', memory_get_usage(true));
             }
         } else {
             while (1) {
@@ -211,6 +220,7 @@ class Spider
         $info['try_num']++;
         $info['status'] = 1;
         $this->all_queue[$url] = $info;
+        $this->upTaskStatus('success_num', 1);
     }
 
     public function fail($url)
@@ -220,6 +230,7 @@ class Spider
         $info['try_num']++;
         $info['status'] = -1;
         $this->all_queue[$url] = $info;
+        $this->upTaskStatus('fail_num', 1);
     }
 
     public function response($url, $response)
@@ -271,5 +282,17 @@ class Spider
             return $only_one ? ($_data[0] ?? '') : $_data;
         }
         return $data;
+    }
+
+    public function upTaskStatus($type, $value)
+    {
+        if ($this->status) {
+            if ($type == 'success_num' || $type == 'fail_num') {
+                $this->status[$type] += 1;
+                $this->status['request_num'] += 1;
+            } else {
+                $this->status[$type] = $value;
+            }
+        }
     }
 }

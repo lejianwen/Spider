@@ -8,6 +8,7 @@ class Log
 {
     static $show = false;
     static $filename = '';
+    static $task_id = 0;
 
     public static function write($msg)
     {
@@ -32,7 +33,7 @@ class Log
         if (is_array($msg)) {
             $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
         }
-        $msg = '[' . date('Y-m-d H:i:s') . '] ' . $msg;
+        $msg = '[' . self::$task_id . '][' . date('Y-m-d H:i:s') . '] ' . $msg;
         self::write($msg);
         if (self::$show) {
             self::show($msg);
