@@ -1,5 +1,11 @@
 # A simple spider
 
+## install
+~~~
+composer require ljw/spider:dev-master
+~~~
+
+## example
 ~~~php
 
 require __DIR__ . '/../vendor/autoload.php';
