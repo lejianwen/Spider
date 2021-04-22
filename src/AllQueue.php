@@ -4,7 +4,7 @@
 namespace Ljw\Spider;
 
 
-class AllQueue implements \ArrayAccess
+class AllQueue implements \ArrayAccess, \Countable
 {
     protected $type;
     /** @var Redis|\Redis|array client */
@@ -72,9 +72,14 @@ class AllQueue implements \ArrayAccess
     public function size()
     {
         if ($this->type == 'redis') {
-            return $this->client->lLen($this->redis_key);
+            return $this->client->hLen($this->redis_key);
         } else {
             return count($this->client);
         }
+    }
+
+    public function count()
+    {
+        return $this->size();
     }
 }

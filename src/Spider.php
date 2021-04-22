@@ -34,7 +34,7 @@ class Spider
 
     public function ready()
     {
-        if (!$this->wait_queue->isEmpty() || $this->all_queue->size() > 0) {
+        if (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0) {
             $msg = "Found data in Redis, continue? no will clean data, default is yes \n";
             $msg .= 'continue? [Y/n]';
             fwrite(STDOUT, $msg);
@@ -45,11 +45,13 @@ class Spider
             if ($arg == 'n') {
                 $this->wait_queue->clear();
                 $this->all_queue->clear();
+            } elseif ($this->wait_queue->isEmpty()) {
+                //等待队列为空,入口页面强制加入
+                $this->addUrl($this->config['entry'], [], true);
             }
+        } else {
+            $this->addUrl($this->config['entry']);
         }
-
-        $main_url = $this->config['entry'];
-        $this->addUrl($main_url);
     }
 
     public function start()
@@ -228,6 +230,7 @@ class Spider
             //重试
             if ($info['try_num'] < $this->config['max_try_num']) {
                 $this->wait_queue->enqueue($info);
+                Log::debug("retry {$url} \n");
             }
         } else {
             $this->success($url);
