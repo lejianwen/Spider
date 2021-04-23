@@ -124,6 +124,9 @@ class Spider
                     $this->response($url, $response);
                 }
                 $this->upTaskStatus('memory', memory_get_usage(true));
+                if (isset($this->config['interval']) && $this->config['interval'] > 0) {
+                    usleep($this->config['interval']);
+                }
             }
         } else {
             while (1) {
@@ -137,7 +140,10 @@ class Spider
                     continue;
                 }
                 $this->response($url['url'], $request->request($url));
-                usleep(10);
+                $this->upTaskStatus('memory', memory_get_usage(true));
+                if (isset($this->config['interval']) && $this->config['interval'] > 0) {
+                    usleep($this->config['interval']);
+                }
             }
         }
     }
