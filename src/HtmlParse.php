@@ -30,7 +30,7 @@ class HtmlParse
         $key = md5($html);
         if ($key != $this->key) {
             $this->key = $key;
-            @$this->dom_documnt->loadHTML('<?xml encoding="UTF-8"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />' . $html);
+            @$this->dom_documnt->loadHTML('<?xml encoding="UTF-8">' . $html);
             $this->xpath = new \DOMXPath($this->dom_documnt);
         }
         $xpath = $this->xpath;

@@ -254,6 +254,11 @@ class Spider
         } else {
             $this->success($url);
             if ($response) {
+                //to utf-8
+                $response_charset = mb_detect_encoding($response, ['UTF-8', 'GBK', 'GB2312', 'LATIN1', 'ASCII', 'BIG5', 'ISO-8859-1']);
+                if ($response_charset != 'UTF-8') {
+                    $response = mb_convert_encoding($response, 'UTF-8', $response_charset);
+                }
                 //解析页面所有链接
                 $html_a = $this->html_parse->select($response, "//a/@href");
                 if (!empty($html_a)) {
