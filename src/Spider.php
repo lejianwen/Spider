@@ -10,7 +10,7 @@ class Spider
     protected $config = [];
     protected $html_parse;
     protected $status;
-    protected $task_id;
+    protected $task_id = 0;
 
     public function __construct($config)
     {
@@ -77,12 +77,14 @@ class Spider
                     }*/
                 } else {
                     $this->task_id = $i;
+                    $this->status = new Status('redis', 1, $this->task_id);
                     echo "$this->task_id start \n";
                     $this->task();
                     break;
                 }
             }
         } else {
+            $this->status = new Status();
             $this->task();
         }
     }
@@ -90,7 +92,6 @@ class Spider
     public function task()
     {
         Redis::_instance()->disConnect();
-        $this->status = new Status('redis', 1, $this->task_id);
         Log::$task_id = $this->task_id;
         $this->upTaskStatus('start_time', microtime(true));
 
