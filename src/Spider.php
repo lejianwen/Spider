@@ -258,6 +258,8 @@ class Spider
                 $response_charset = mb_detect_encoding($response, ['UTF-8', 'GBK', 'GB2312', 'LATIN1', 'ASCII', 'BIG5', 'ISO-8859-1']);
                 if ($response_charset != 'UTF-8') {
                     $response = mb_convert_encoding($response, 'UTF-8', $response_charset);
+                    $pattern = '/<meta[^>]*?charset=.*?>/i';
+                    $response = preg_replace($pattern, '', $response, 1);
                 }
                 //解析页面所有链接
                 $html_a = $this->html_parse->select($response, "//a/@href");
