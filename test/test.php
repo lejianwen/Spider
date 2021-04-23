@@ -8,16 +8,17 @@ $config = [
     'domains' => ['www.ibookv.com'],
     'max_try_num' => 5,
     'max_depth' => 0,
-    'task_num' => 1,
+    'task_num' => 2,
     'log_filename' => 'spider.log',
 //            'log_show' => 1,
 //            'multi_num' => 5, //guzzle 并发请求,开启多任务时不建议开启
+    'show_task_panel' => 1, //show task status
     'guzzle' => [
         'verify' => false, //建议false,不校验https
         'headers' => [
             'User-Agent' => 'ljw',
             'Client-Ip' => '127.0.0.1',
-            'timeout' => 3
+            'timeout' => 10
         ]
     ],
     'redis' => [
@@ -70,7 +71,7 @@ $config = [
             ],
             'only_one' => 1,
             'callback' => function ($data, $html) {
-//                        var_dump($data);
+//                var_dump($data);
             }
         ],
         [

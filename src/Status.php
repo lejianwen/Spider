@@ -68,5 +68,14 @@ class Status implements \ArrayAccess
     {
         return $this->redis_key . ':' . $this->server_id . ':' . $this->task_id;
     }
+
+    public function clear()
+    {
+        if ($this->type == 'redis') {
+            $this->client->del($this->key());
+        } else {
+            unset($this[$this->key()]);
+        }
+    }
 }
 

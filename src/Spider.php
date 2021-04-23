@@ -14,8 +14,8 @@ class Spider
 
     public function __construct($config)
     {
-        $task_num = $config['task_num'] ?? 1;
-        if ($task_num > 1) {
+        $config['task_num'] = $config['task_num'] ?? 1;
+        if ($config['task_num'] > 1) {
             if (empty($config['redis'])) {
                 echo "task_num > 2 must redis \n";
                 exit;
@@ -23,11 +23,12 @@ class Spider
             Redis::_instance($config['redis']);
             $this->wait_queue = new Queue('redis');
             $this->all_queue = new AllQueue('redis');
+            // status init in fork
         } else {
             $this->wait_queue = new Queue();
             $this->all_queue = new AllQueue();
+            $this->status = new Status();
         }
-
         $this->html_parse = new HtmlParse();
         $this->config = $config;
         Log::$show = $config['log_show'] ?? false;
@@ -36,7 +37,7 @@ class Spider
 
     public function ready()
     {
-        if (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0) {
+        if ($this->config['task_num'] > 1 && (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0)) {
             $msg = "Old data in Redis, continue? no will clean data, default is yes \n";
             $msg .= 'continue? [Y/n]';
             fwrite(STDOUT, $msg);
@@ -47,6 +48,13 @@ class Spider
             if ($arg == 'n') {
                 $this->wait_queue->clear();
                 $this->all_queue->clear();
+                for ($i = 0; $i < $this->config['task_num']; $i++) {
+                    //clear status
+                    $status = new Status('redis', 1, $i);
+                    $status->clear();
+                    unset($status);
+                }
+                $this->addUrl($this->config['entry']);
             } elseif ($this->wait_queue->isEmpty()) {
                 //等待队列为空,入口页面强制加入
                 $this->addUrl($this->config['entry'], [], true);
@@ -59,7 +67,6 @@ class Spider
     public function start()
     {
         $this->ready();
-
         if ($this->config['task_num'] > 1) {
             //不关心子进程的状态
             pcntl_signal(SIGCHLD, SIG_IGN);
@@ -68,23 +75,19 @@ class Spider
                 if ($pid > 0) {
                     pcntl_wait($status, WNOHANG);
                     //显示
-                    /*if ($i + 1 == $this->config['task_num']) {
+                    if ($i + 1 == $this->config['task_num'] && !empty($this->config['show_task_panel'])) {
                         //最后一个
-                        while (1) {
-                            printf("memory usage: %.2f M\n", memory_get_usage() / 1024 / 1024);
-                            sleep(1);
-                        }
-                    }*/
+                        $this->panel();
+                    }
                 } else {
                     $this->task_id = $i;
+                    Log::$task_id = $this->task_id;
                     $this->status = new Status('redis', 1, $this->task_id);
-                    echo "$this->task_id start \n";
                     $this->task();
                     break;
                 }
             }
         } else {
-            $this->status = new Status();
             $this->task();
         }
     }
@@ -92,9 +95,7 @@ class Spider
     public function task()
     {
         Redis::_instance()->disConnect();
-        Log::$task_id = $this->task_id;
         $this->upTaskStatus('start_time', microtime(true));
-
         $request = new Request($this->config['guzzle'] ?? []);
         if (isset($this->config['multi_num']) && $this->config['multi_num'] > 1) {
             while (1) {
@@ -222,7 +223,7 @@ class Spider
 
     public function success($url)
     {
-        Log::debug("get {$url} success \n");
+        Log::debug("get success {$url}  \n");
         $info = $this->all_queue[$url];
         $info['try_num']++;
         $info['status'] = 1;
@@ -232,7 +233,7 @@ class Spider
 
     public function fail($url)
     {
-        Log::debug("get {$url} fail \n");
+        Log::debug("get fail {$url}  \n");
         $info = $this->all_queue[$url];
         $info['try_num']++;
         $info['status'] = -1;
@@ -271,7 +272,7 @@ class Spider
                     }
                 }
             } else {
-                Log::debug("get {$url} success, but response is empty \n");
+                Log::debug("get success {$url} , but response is empty \n");
             }
         }
     }
@@ -302,4 +303,41 @@ class Spider
             }
         }
     }
+
+    public function panel()
+    {
+        if ($this->config['task_num'] > 1) {
+            $statuses = [];
+            for ($i = 0; $i < $this->config['task_num']; $i++) {
+                $statuses[] = new Status('redis', 1, $i);
+            }
+            echo "\033c";
+            while (1) {
+                echo "\033[0;0H";
+                echo "\033[1A";
+                echo "------------------------ TASKS ------------------------\n";
+                echo "\033[47;30m";
+                echo str_pad('task_index', 15);
+                echo str_pad('request_num', 15);
+                echo str_pad('success_num', 15);
+                echo str_pad('fail_num', 15);
+                echo str_pad('mem', 15);
+                echo "\033[0m";
+                echo PHP_EOL;
+                foreach ($statuses as $key => $status) {
+                    echo str_pad($key, 15);
+                    echo str_pad($status['request_num'], 15);
+                    echo str_pad($status['success_num'], 15);
+                    echo str_pad($status['fail_num'], 15);
+                    echo str_pad(round($status['memory'] / 1024 / 1024, 2) . 'M', 15);
+                    echo PHP_EOL;
+                }
+                echo "\033[0m";
+                sleep(1);
+            }
+        } else {
+            echo "only one task, no panel, sorry!";
+        }
+    }
+
 }
