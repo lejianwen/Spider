@@ -318,7 +318,7 @@ class Spider
             for ($i = 0; $i < $this->config['task_num']; $i++) {
                 $statuses[] = new Status('redis', 1, $i);
             }
-            echo "\033c";
+            echo "\033[2J";
             while (1) {
                 $str = "\033[0;0H"
                     . "\033[1A"
