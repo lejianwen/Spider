@@ -11,6 +11,7 @@ class Spider
     protected $html_parse;
     protected $status;
     protected $task_id = 0;
+    public $filter_url;
 
     public function __construct($config)
     {
@@ -214,6 +215,12 @@ class Spider
 
         if (!empty($this->config['max_depth']) && $this->config['max_depth'] < $url_info['depth']) {
             return;
+        }
+
+        if ($this->filter_url && $this->filter_url instanceof \Closure) {
+            if (!($this->filter_url)($url_info)) {
+                return;
+            }
         }
 
         $this->all_queue[$url] = $url_info;
