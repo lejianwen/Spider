@@ -320,26 +320,32 @@ class Spider
             }
             echo "\033c";
             while (1) {
-                echo "\033[0;0H";
-                echo "\033[1A";
-                echo "------------------------ TASKS ------------------------\n";
-                echo "\033[47;30m";
-                echo str_pad('task_index', 15);
-                echo str_pad('request_num', 15);
-                echo str_pad('success_num', 15);
-                echo str_pad('fail_num', 15);
-                echo str_pad('mem', 15);
-                echo "\033[0m";
-                echo PHP_EOL;
+                $str = "\033[0;0H"
+                    . "\033[1A"
+                    . "------------------------ TASKS ------------------------\n"
+                    . "\033[47;30m"
+                    . str_pad('task_index', 15)
+                    . str_pad('request_num', 15)
+                    . str_pad('success_num', 15)
+                    . str_pad('fail_num', 15)
+                    . str_pad('mem', 15)
+                    . str_pad('time', 15)
+                    . str_pad('speed', 15)
+                    . "\033[0m" . PHP_EOL;
+                $time = microtime(true);
                 foreach ($statuses as $key => $status) {
-                    echo str_pad($key, 15);
-                    echo str_pad($status['request_num'], 15);
-                    echo str_pad($status['success_num'], 15);
-                    echo str_pad($status['fail_num'], 15);
-                    echo str_pad(round($status['memory'] / 1024 / 1024, 2) . 'M', 15);
-                    echo PHP_EOL;
+                    $use_time = ($time - $status['start_time']);
+                    $str .= str_pad($key, 15)
+                        . str_pad($status['request_num'], 15)
+                        . str_pad($status['success_num'], 15)
+                        . str_pad($status['fail_num'], 15)
+                        . str_pad(round($status['memory'] / 1024 / 1024, 2) . 'M', 15)
+                        . str_pad(round($use_time, 2) . 's', 15)
+                        . str_pad(round($status['request_num'] / $use_time, 2) . '/s', 15)
+                        . PHP_EOL;
                 }
-                echo "\033[0m";
+                $str .= "\033[0m";
+                echo $str;
                 sleep(1);
             }
         } else {
