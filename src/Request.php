@@ -20,7 +20,6 @@ class Request
     /**
      * @param $url
      * @return string
-     * @throws \GuzzleHttp\Exception\GuzzleException
      */
     public function request($url)
     {
@@ -29,7 +28,7 @@ class Request
                 $url['method'] ?? 'get',
                 $url['url'],
                 [
-                    'headers' => $url['headers']
+                    'headers' => $url['headers'] ?? []
                 ]);
             $this->last_url = $url;
             return $response->getBody()->getContents();
@@ -50,7 +49,7 @@ class Request
                 $url['method'] ?? 'get',
                 $url['url'],
                 [
-                    'headers' => $url['headers']
+                    'headers' => $url['headers'] ?? []
                 ]);
         }
         $results = [];
