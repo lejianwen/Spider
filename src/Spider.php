@@ -170,7 +170,7 @@ class Spider
         ];
     }
 
-    public function addUrl($url, $cur_url = [], $repeat = false)
+    public function addUrl($url, $cur_url = [], $repeat = false, $filter = true)
     {
         $url = trim($url);
         if (!$url
@@ -217,7 +217,7 @@ class Spider
             return;
         }
 
-        if ($this->filter_url && $this->filter_url instanceof \Closure) {
+        if ($filter && $this->filter_url && $this->filter_url instanceof \Closure) {
             if (!($this->filter_url)($url_info)) {
                 return;
             }
@@ -225,12 +225,12 @@ class Spider
 
         $this->all_queue[$url] = $url_info;
         $this->wait_queue->enqueue($url_info);
-        Log::debug("add {$url} \n");
+        Log::debug("add {$url}");
     }
 
     public function success($url)
     {
-        Log::debug("get success {$url}  \n");
+        Log::debug("get success {$url}");
         $info = $this->all_queue[$url];
         $info['try_num']++;
         $info['status'] = 1;
@@ -240,7 +240,7 @@ class Spider
 
     public function fail($url)
     {
-        Log::debug("get fail {$url}  \n");
+        Log::debug("get fail {$url}");
         $info = $this->all_queue[$url];
         $info['try_num']++;
         $info['status'] = -1;
@@ -256,7 +256,7 @@ class Spider
             //重试
             if ($info['try_num'] < $this->config['max_try_num']) {
                 $this->wait_queue->enqueue($info);
-                Log::debug("retry {$url} \n");
+                Log::debug("retry {$url}");
             }
         } else {
             $this->success($url);
@@ -281,7 +281,7 @@ class Spider
                     }
                 }
             } else {
-                Log::debug("get success {$url} , but response is empty \n");
+                Log::debug("get success {$url} , but response is empty");
             }
         }
     }

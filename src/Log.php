@@ -16,7 +16,7 @@ class Log
             $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
         }
         if (self::$filename) {
-            file_put_contents(self::$filename, $msg, FILE_APPEND);
+            file_put_contents(self::$filename, $msg . PHP_EOL, FILE_APPEND);
         }
     }
 
@@ -25,7 +25,7 @@ class Log
         if (is_array($msg)) {
             $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
         }
-        echo $msg;
+        echo $msg . PHP_EOL;
     }
 
     public static function debug($msg)
