@@ -15,30 +15,31 @@ class Spider
 
     public function __construct($config)
     {
-        $config['task_num'] = $config['task_num'] ?? 1;
-        if ($config['task_num'] > 1) {
-            if (empty($config['redis'])) {
-                echo "task_num > 2 must redis \n";
+        $this->config = $config;
+        $this->config ['task_num'] = $this->config ['task_num'] ?? 1;
+        if (!empty($this->config ['queue_redis']) || $this->config ['task_num'] > 1) {
+            if (empty($this->config ['redis'])) {
+                echo "task_num > 1 must redis \n";
                 exit;
             }
             Redis::_instance($config['redis']);
             $this->wait_queue = new Queue('redis');
             $this->all_queue = new AllQueue('redis');
-            // status init in fork
+            $this->status = new Status('redis', $this->config['server_id'] ?? 1);
         } else {
             $this->wait_queue = new Queue();
             $this->all_queue = new AllQueue();
             $this->status = new Status();
         }
         $this->html_parse = new HtmlParse();
-        $this->config = $config;
+
         Log::$show = $config['log_show'] ?? false;
         Log::$filename = $config['log_filename'] ?? '';
     }
 
     public function ready()
     {
-        if ($this->config['task_num'] > 1 && (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0)) {
+        if ((!empty($this->config['queue_redis']) || $this->config['task_num'] > 1) && (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0)) {
             $msg = "Old data in Redis, continue? no will clean data, default is yes \n";
             $msg .= 'continue? [Y/n]';
             fwrite(STDOUT, $msg);
@@ -51,9 +52,8 @@ class Spider
                 $this->all_queue->clear();
                 for ($i = 0; $i < $this->config['task_num']; $i++) {
                     //clear status
-                    $status = new Status('redis', 1, $i);
-                    $status->clear();
-                    unset($status);
+                    $this->status->setTaskId($i);
+                    $this->status->clear();
                 }
                 $this->addUrl($this->config['entry']);
             } elseif ($this->wait_queue->isEmpty()) {
@@ -83,7 +83,7 @@ class Spider
                 } else {
                     $this->task_id = $i;
                     Log::$task_id = $this->task_id;
-                    $this->status = new Status('redis', 1, $this->task_id);
+                    $this->status->setTaskId($this->task_id);
                     $this->task();
                     break;
                 }
@@ -127,18 +127,20 @@ class Spider
                 }
                 $this->upTaskStatus('memory', memory_get_usage(true));
                 if (isset($this->config['interval']) && $this->config['interval'] > 0) {
-                    usleep($this->config['interval'] * 1000);
+                    usleep($this->config['interval']);
                 }
             }
         } else {
             while (1) {
                 if ($this->wait_queue->isEmpty()) {
+                    Log::debug("dequeue null");
                     sleep(1);
                     continue;
                 }
                 $url = $this->wait_queue->dequeue();
                 //redis队列可能最后一个已经被别的进程获取
                 if (!$url) {
+                    Log::debug("dequeue null");
                     continue;
                 }
                 $this->response($url['url'], $request->request($url));
@@ -225,12 +227,12 @@ class Spider
 
         $this->all_queue[$url] = $url_info;
         $this->wait_queue->enqueue($url_info);
-        Log::debug("add {$url}");
+        Log::debug("add {$url} ");
     }
 
     public function success($url)
     {
-        Log::debug("get success {$url}");
+        Log::debug("get success {$url} ");
         $info = $this->all_queue[$url];
         $info['try_num']++;
         $info['status'] = 1;
@@ -240,7 +242,7 @@ class Spider
 
     public function fail($url)
     {
-        Log::debug("get fail {$url}");
+        Log::debug("get fail {$url} ");
         $info = $this->all_queue[$url];
         $info['try_num']++;
         $info['status'] = -1;
@@ -256,7 +258,7 @@ class Spider
             //重试
             if ($info['try_num'] < $this->config['max_try_num']) {
                 $this->wait_queue->enqueue($info);
-                Log::debug("retry {$url}");
+                Log::debug("retry {$url} ");
             }
         } else {
             $this->success($url);
@@ -276,12 +278,12 @@ class Spider
                         $data = $this->select($response, $page);
 
                         if (!empty($page['callback'])) {
-                            $page['callback']($data, $url, $response);
+                            $page['callback']($data, $url, $response, $this);
                         }
                     }
                 }
             } else {
-                Log::debug("get success {$url} , but response is empty");
+                Log::debug("get success {$url} , but response is empty ");
             }
         }
     }

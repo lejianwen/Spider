@@ -77,5 +77,11 @@ class Status implements \ArrayAccess
             unset($this[$this->key()]);
         }
     }
+
+    public function setTaskId($task_id)
+    {
+        $this->task_id = $task_id;
+        return $this;
+    }
 }
 
