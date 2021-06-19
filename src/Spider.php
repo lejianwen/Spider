@@ -16,13 +16,13 @@ class Spider
     public function __construct($config)
     {
         $this->config = $config;
-        $this->config ['task_num'] = $this->config ['task_num'] ?? 1;
-        if (!empty($this->config ['queue_redis']) || $this->config ['task_num'] > 1) {
-            if (empty($this->config ['redis'])) {
+        $this->config['task_num'] = $this->config['task_num'] ?? 1;
+        if (!empty($this->config['queue_redis']) || $this->config['task_num'] > 1) {
+            if (empty($this->config['redis'])) {
                 echo "task_num > 1 must redis \n";
                 exit;
             }
-            Redis::_instance($config['redis']);
+            Redis::_instance($this->config['redis']);
             $this->wait_queue = new Queue('redis');
             $this->all_queue = new AllQueue('redis');
             $this->status = new Status('redis', $this->config['server_id'] ?? 1);
@@ -33,8 +33,8 @@ class Spider
         }
         $this->html_parse = new HtmlParse();
 
-        Log::$show = $config['log_show'] ?? false;
-        Log::$filename = $config['log_filename'] ?? '';
+        Log::$show = $this->config['log_show'] ?? false;
+        Log::$filename = $this->config['log_filename'] ?? '';
     }
 
     public function ready()
