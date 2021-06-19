@@ -48,20 +48,24 @@ class Spider
                 $arg = 'y';
             }
             if ($arg == 'n') {
-                $this->wait_queue->clear();
-                $this->all_queue->clear();
-                for ($i = 0; $i < $this->config['task_num']; $i++) {
-                    //clear status
-                    $this->status->setTaskId($i);
-                    $this->status->clear();
-                }
-                $this->addUrl($this->config['entry']);
-            } elseif ($this->wait_queue->isEmpty()) {
-                //等待队列为空,入口页面强制加入
-                $this->addUrl($this->config['entry'], [], true);
+                $this->clear();
             }
-        } else {
+        }
+
+        if ($this->wait_queue->isEmpty()) {
+            //等待队列为空,入口页面强制加入
             $this->addUrl($this->config['entry']);
+        }
+    }
+
+    public function clear()
+    {
+        $this->wait_queue->clear();
+        $this->all_queue->clear();
+        for ($i = 0; $i < $this->config['task_num']; $i++) {
+            //clear status
+            $this->status->setTaskId($i);
+            $this->status->clear();
         }
     }
 
