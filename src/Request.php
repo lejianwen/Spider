@@ -9,12 +9,19 @@ use GuzzleHttp\Promise\Promise;
 
 class Request
 {
+    /** @var Client */
     protected $client;
     protected $last_url;
+    protected $proxy;
 
     public function __construct($config = [])
     {
         $this->client = new Client($config);
+    }
+
+    public function setProxy($proxy)
+    {
+        $this->proxy = $proxy;
     }
 
     /**
@@ -28,7 +35,8 @@ class Request
                 $url['method'] ?? 'get',
                 $url['url'],
                 [
-                    'headers' => $url['headers'] ?? []
+                    'headers' => $url['headers'] ?? [],
+                    'proxy' => $this->proxy ?: null
                 ]);
             $this->last_url = $url;
             return $response->getBody()->getContents();
@@ -49,7 +57,8 @@ class Request
                 $url['method'] ?? 'get',
                 $url['url'],
                 [
-                    'headers' => $url['headers'] ?? []
+                    'headers' => $url['headers'] ?? [],
+                    'proxy' => $this->proxy ?: null
                 ]);
         }
         $results = [];

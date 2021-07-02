@@ -12,11 +12,12 @@ class Spider
     protected $status;
     protected $task_id = 0;
     public $filter_url;
+    protected $using_proxy_index = 0; //使用的代理索引
 
     public function __construct($config)
     {
         $this->config = $config;
-        $this->config['task_num'] = $this->config['task_num'] ?? 1;
+        $this->config['task_num'] = $this->config ['task_num'] ?? 1;
         if (!empty($this->config['queue_redis']) || $this->config['task_num'] > 1) {
             if (empty($this->config['redis'])) {
                 echo "task_num > 1 must redis \n";
@@ -125,6 +126,12 @@ class Spider
                     usleep(100);
                     continue;
                 }
+
+                //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
+                if (!empty($this->config['proxy'])) {
+                    $request = new Request($this->config['guzzle'] ?? []);
+                    $request->setProxy($this->useProxy());
+                }
                 $responses = $request->requestAsync($wait_urls);
                 foreach ($responses as $url => $response) {
                     $this->response($url, $response);
@@ -147,7 +154,13 @@ class Spider
                     Log::debug("dequeue null");
                     continue;
                 }
-                $this->response($url['url'], $request->request($url));
+                //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
+                if (!empty($this->config['proxy'])) {
+                    $request = new Request($this->config['guzzle'] ?? []);
+                    $request->setProxy($this->useProxy());
+                }
+                $response = $request->request($url);
+                $this->response($url['url'], $response);
                 $this->upTaskStatus('memory', memory_get_usage(true));
                 if (isset($this->config['interval']) && $this->config['interval'] > 0) {
                     usleep($this->config['interval'] * 1000);
@@ -191,19 +204,24 @@ class Spider
             return;
         }
 
-
         if (!empty($parse['host']) && !in_array($parse['host'], $this->config['domains'])) {
             //不在domain中的链接忽略
             return;
         }
-        if (empty($parse['host']) && !empty($cur_url)) {
+        if (!empty($cur_url)) {
             $cur_parse = parse_url($cur_url['url']);
-            if (substr($url, 0, 1) == '/') {
-                //根路径
-                $url = $cur_parse['scheme'] . '://' . $cur_parse['host'] . $url;
-            } else {
-                //当前路径
-                $url = $cur_url['url'] . $url;
+            if (empty($parse['host'])) {
+                //内链
+                if (substr($url, 0, 1) == '/') {
+                    //根路径
+                    $url = $cur_parse['scheme'] . '://' . $cur_parse['host'] . $url;
+                } else {
+                    //当前路径
+                    $url = $cur_url['url'] . $url;
+                }
+            } elseif (empty($parse['scheme'])) {
+                // 以 //开头的
+                $url = $cur_parse['scheme'] . ':' . $url;
             }
         }
         if (!$repeat) {
@@ -370,6 +388,18 @@ class Spider
         } else {
             echo "only one task, no panel, sorry!";
         }
+    }
+
+    public function useProxy()
+    {
+        if (!empty($this->config['proxy'])) {
+            $this->using_proxy_index++;
+            if ($this->using_proxy_index >= count($this->config['proxy'])) {
+                $this->using_proxy_index = 0;
+            }
+            return $this->config['proxy'][$this->using_proxy_index];
+        }
+        return null;
     }
 
 }
