@@ -21,6 +21,11 @@ $config = [
             'timeout' => 10
         ]
     ],
+    'proxy' => [
+        '192.168.1.2:3128',
+        '192.168.1.3:3129'
+    ],
+    'queue_redis' => 1, //是否使用redis, task_num >1 是强制使用
     'redis' => [
         'host' => 'redis',
         'port' => 6379,

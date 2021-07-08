@@ -5,7 +5,6 @@ namespace Ljw\Spider;
 
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Promise\Promise;
 
 class Request
 {

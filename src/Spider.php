@@ -13,11 +13,12 @@ class Spider
     protected $task_id = 0;
     public $filter_url;
     protected $using_proxy_index = 0; //使用的代理索引
+    public $empty_queue_func;
 
     public function __construct($config)
     {
         $this->config = $config;
-        $this->config['task_num'] = $this->config ['task_num'] ?? 1;
+        $this->config['task_num'] = $this->config['task_num'] ?? 1;
         if (!empty($this->config['queue_redis']) || $this->config['task_num'] > 1) {
             if (empty($this->config['redis'])) {
                 echo "task_num > 1 must redis \n";
@@ -146,6 +147,11 @@ class Spider
                 if ($this->wait_queue->isEmpty()) {
                     Log::debug("dequeue null");
                     sleep(1);
+
+                    if ($this->empty_queue_func) {
+                        ($this->empty_queue_func)($this);
+                    }
+
                     continue;
                 }
                 $url = $this->wait_queue->dequeue();
@@ -397,6 +403,7 @@ class Spider
             if ($this->using_proxy_index >= count($this->config['proxy'])) {
                 $this->using_proxy_index = 0;
             }
+            Log::debug("use proxy {$this->config['proxy'][$this->using_proxy_index]} \n");
             return $this->config['proxy'][$this->using_proxy_index];
         }
         return null;
