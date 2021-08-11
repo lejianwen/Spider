@@ -195,6 +195,13 @@ class Spider
         ];
     }
 
+    /**
+     * @param $url
+     * @param array $cur_url 正在访问的url，主要用于refer
+     * @param false $repeat 是否覆盖
+     * @param bool $filter 是否过滤
+     * @return bool
+     */
     public function addUrl($url, $cur_url = [], $repeat = false, $filter = true)
     {
         $url = trim($url);
@@ -202,17 +209,17 @@ class Spider
             || strpos($url, '#') !== false
             || 'javascript:' == strtolower(substr($url, 0, 11))) {
             //javascript
-            return;
+            return false;
         }
         $parse = parse_url($url);
         if (!empty($parse['scheme']) && !in_array($parse['scheme'], ['https', 'http'])) {
             //忽略非http和https
-            return;
+            return false;
         }
 
         if (!empty($parse['host']) && !in_array($parse['host'], $this->config['domains'])) {
             //不在domain中的链接忽略
-            return;
+            return false;
         }
         if (!empty($cur_url)) {
             $cur_parse = parse_url($cur_url['url']);
@@ -233,29 +240,30 @@ class Spider
         if (!$repeat) {
             if (!empty($this->all_queue[$url]) && $this->all_queue[$url]['status'] > -1) {
                 //已经添加过了
-                return;
+                return false;
             }
             if (!empty($this->all_queue[$url]) && isset($this->config['max_try_num']) && $this->all_queue[$url]['try_num'] >= $this->config['max_try_num']) {
                 //达到重试最大次数
-                return;
+                return false;
             }
         }
 
         $url_info = $this->makeUrl($url, $cur_url);
 
         if (!empty($this->config['max_depth']) && $this->config['max_depth'] < $url_info['depth']) {
-            return;
+            return false;
         }
 
         if ($filter && $this->filter_url && $this->filter_url instanceof \Closure) {
             if (!($this->filter_url)($url_info)) {
-                return;
+                return false;
             }
         }
 
         $this->all_queue[$url] = $url_info;
         $this->wait_queue->enqueue($url_info);
         Log::debug("add {$url} ");
+        return true;
     }
 
     public function success($url)
