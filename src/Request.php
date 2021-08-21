@@ -40,6 +40,7 @@ class Request
             $this->last_url = $url;
             return $response->getBody()->getContents();
         } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+            Log::debug("get fail {$url['url']} " . $e->getMessage());
             return false;
         }
     }
@@ -65,6 +66,7 @@ class Request
             try {
                 $results[$key] = $promise->wait()->getBody()->getContents();
             } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+                Log::debug("get fail {$url['url']} " . $e->getMessage());
                 $results[$key] = false;
             }
         }

@@ -55,8 +55,11 @@ class Spider
         }
 
         if ($this->wait_queue->isEmpty()) {
-            //等待队列为空,入口页面强制加入
-            $this->addUrl($this->config['entry']);
+            $entries = (array)$this->config['entry'];
+            foreach ($entries as $entry) {
+                //等待队列为空,入口页面强制加入
+                $this->addUrl($entry, [], true, false);
+            }
         }
     }
 
@@ -139,7 +142,7 @@ class Spider
                 }
                 $this->upTaskStatus('memory', memory_get_usage(true));
                 if (isset($this->config['interval']) && $this->config['interval'] > 0) {
-                    usleep($this->config['interval']);
+                    usleep($this->config['interval'] * 1000);
                 }
             }
         } else {
@@ -179,10 +182,48 @@ class Spider
      * 构造url结构
      * @param $url
      * @param array $cur_url
-     * @return array
+     * @return array|boolean
      */
     public function makeUrl($url, $cur_url = [])
     {
+        $url = trim($url);
+        if (!$url
+            || strpos($url, '#') !== false
+            || 'javascript:' == strtolower(substr($url, 0, 11))) {
+            //javascript
+            return false;
+        }
+        $parse = parse_url($url);
+        if (!empty($parse['scheme']) && !in_array($parse['scheme'], ['https', 'http'])) {
+            //忽略非http和https
+            return false;
+        }
+
+        if (!empty($parse['host']) && !in_array($parse['host'], $this->config['domains'])) {
+            //不在domain中的链接忽略
+            return false;
+        }
+
+        if (empty($parse['host']) || empty($parse['scheme'])) {
+            if (empty($cur_url)) {
+                return false;
+            }
+            $cur_parse = parse_url($cur_url['url']);
+            if (empty($cur_parse) || empty($cur_parse['scheme']) || empty($cur_parse['host'])) {
+                return false;
+            }
+
+            if (empty($parse['host']) && empty($parse['scheme'])) {
+                //根路径
+                $url = $cur_parse['scheme'] . '://' . $cur_parse['host'] . $url;
+            } elseif (empty($parse['host'])) {
+                //当前路径
+                $url = $cur_url['url'] . $url;
+            } elseif (empty($parse['scheme'])) {
+                // 以 //开头的
+                $url = $cur_parse['scheme'] . ':' . $url;
+            }
+        }
         return [
             'url' => $url,
             'method' => 'get',
@@ -204,51 +245,22 @@ class Spider
      */
     public function addUrl($url, $cur_url = [], $repeat = false, $filter = true)
     {
-        $url = trim($url);
-        if (!$url
-            || strpos($url, '#') !== false
-            || 'javascript:' == strtolower(substr($url, 0, 11))) {
-            //javascript
-            return false;
-        }
-        $parse = parse_url($url);
-        if (!empty($parse['scheme']) && !in_array($parse['scheme'], ['https', 'http'])) {
-            //忽略非http和https
+        $url_info = $this->makeUrl($url, $cur_url);
+        if (!$url_info) {
             return false;
         }
 
-        if (!empty($parse['host']) && !in_array($parse['host'], $this->config['domains'])) {
-            //不在domain中的链接忽略
-            return false;
-        }
-        if (!empty($cur_url)) {
-            $cur_parse = parse_url($cur_url['url']);
-            if (empty($parse['host'])) {
-                //内链
-                if (substr($url, 0, 1) == '/') {
-                    //根路径
-                    $url = $cur_parse['scheme'] . '://' . $cur_parse['host'] . $url;
-                } else {
-                    //当前路径
-                    $url = $cur_url['url'] . $url;
-                }
-            } elseif (empty($parse['scheme'])) {
-                // 以 //开头的
-                $url = $cur_parse['scheme'] . ':' . $url;
-            }
-        }
         if (!$repeat) {
-            if (!empty($this->all_queue[$url]) && $this->all_queue[$url]['status'] > -1) {
+            $ex = $this->all_queue[$url_info['url']];
+            if (!empty($ex) && $ex['status'] > -1) {
                 //已经添加过了
                 return false;
             }
-            if (!empty($this->all_queue[$url]) && isset($this->config['max_try_num']) && $this->all_queue[$url]['try_num'] >= $this->config['max_try_num']) {
+            if (!empty($ex) && isset($this->config['max_try_num']) && $ex['try_num'] >= $this->config['max_try_num']) {
                 //达到重试最大次数
                 return false;
             }
         }
-
-        $url_info = $this->makeUrl($url, $cur_url);
 
         if (!empty($this->config['max_depth']) && $this->config['max_depth'] < $url_info['depth']) {
             return false;
@@ -263,6 +275,41 @@ class Spider
         $this->all_queue[$url] = $url_info;
         $this->wait_queue->enqueue($url_info);
         Log::debug("add {$url} ");
+        return true;
+    }
+
+    public function unshiftUrl($url, $cur_url = [], $repeat = false, $filter = true)
+    {
+        $url_info = $this->makeUrl($url, $cur_url);
+        if (!$url_info) {
+            return false;
+        }
+
+        if (!$repeat) {
+            $ex = $this->all_queue[$url_info['url']];
+            if (!empty($ex) && $ex['status'] > -1) {
+                //已经添加过了
+                return false;
+            }
+            if (!empty($ex) && isset($this->config['max_try_num']) && $ex['try_num'] >= $this->config['max_try_num']) {
+                //达到重试最大次数
+                return false;
+            }
+        }
+
+        if (!empty($this->config['max_depth']) && $this->config['max_depth'] < $url_info['depth']) {
+            return false;
+        }
+
+        if ($filter && $this->filter_url && $this->filter_url instanceof \Closure) {
+            if (!($this->filter_url)($url_info)) {
+                return false;
+            }
+        }
+
+        $this->all_queue[$url] = $url_info;
+        $this->wait_queue->unshift($url_info);
+        Log::debug("unshift {$url} ");
         return true;
     }
 
@@ -364,43 +411,39 @@ class Spider
 
     public function panel()
     {
-        if ($this->config['task_num'] > 1) {
-            $statuses = [];
-            for ($i = 0; $i < $this->config['task_num']; $i++) {
-                $statuses[] = new Status('redis', 1, $i);
+        $statuses = [];
+        for ($i = 0; $i < $this->config['task_num']; $i++) {
+            $statuses[] = new Status('redis', 1, $i);
+        }
+        echo "\033[2J";
+        while (1) {
+            $str = "\033[0;0H"
+                . "\033[1A"
+                . "------------------------ TASKS ------------------------\n"
+                . "\033[47;30m"
+                . str_pad('task_index', 15)
+                . str_pad('request_num', 15)
+                . str_pad('success_num', 15)
+                . str_pad('fail_num', 15)
+                . str_pad('mem', 15)
+                . str_pad('time', 15)
+                . str_pad('speed', 15)
+                . "\033[0m" . PHP_EOL;
+            $time = microtime(true);
+            foreach ($statuses as $key => $status) {
+                $use_time = ($time - $status['start_time']);
+                $str .= str_pad($key, 15)
+                    . str_pad($status['request_num'], 15)
+                    . str_pad($status['success_num'], 15)
+                    . str_pad($status['fail_num'], 15)
+                    . str_pad(round($status['memory'] / 1024 / 1024, 2) . 'M', 15)
+                    . str_pad(round($use_time, 2) . 's', 15)
+                    . str_pad(round($status['request_num'] / $use_time, 2) . '/s', 15)
+                    . PHP_EOL;
             }
-            echo "\033[2J";
-            while (1) {
-                $str = "\033[0;0H"
-                    . "\033[1A"
-                    . "------------------------ TASKS ------------------------\n"
-                    . "\033[47;30m"
-                    . str_pad('task_index', 15)
-                    . str_pad('request_num', 15)
-                    . str_pad('success_num', 15)
-                    . str_pad('fail_num', 15)
-                    . str_pad('mem', 15)
-                    . str_pad('time', 15)
-                    . str_pad('speed', 15)
-                    . "\033[0m" . PHP_EOL;
-                $time = microtime(true);
-                foreach ($statuses as $key => $status) {
-                    $use_time = ($time - $status['start_time']);
-                    $str .= str_pad($key, 15)
-                        . str_pad($status['request_num'], 15)
-                        . str_pad($status['success_num'], 15)
-                        . str_pad($status['fail_num'], 15)
-                        . str_pad(round($status['memory'] / 1024 / 1024, 2) . 'M', 15)
-                        . str_pad(round($use_time, 2) . 's', 15)
-                        . str_pad(round($status['request_num'] / $use_time, 2) . '/s', 15)
-                        . PHP_EOL;
-                }
-                $str .= "\033[0m";
-                echo $str;
-                sleep(1);
-            }
-        } else {
-            echo "only one task, no panel, sorry!";
+            $str .= "\033[0m";
+            echo $str;
+            sleep(1);
         }
     }
 
@@ -411,7 +454,7 @@ class Spider
             if ($this->using_proxy_index >= count($this->config['proxy'])) {
                 $this->using_proxy_index = 0;
             }
-            Log::debug("use proxy {$this->config['proxy'][$this->using_proxy_index]} \n");
+            Log::debug("use proxy {$this->config['proxy'][$this->using_proxy_index]}");
             return $this->config['proxy'][$this->using_proxy_index];
         }
         return null;

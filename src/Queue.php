@@ -45,6 +45,15 @@ class Queue
         }
     }
 
+    public function unshift($value)
+    {
+        if ($this->type == 'redis') {
+            return $this->client->rPush($this->redis_key, json_encode($value, JSON_UNESCAPED_UNICODE));
+        } else {
+            return $this->client->unshift($value);
+        }
+    }
+
     public function isEmpty()
     {
         if ($this->type == 'redis') {
