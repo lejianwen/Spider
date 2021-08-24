@@ -38,7 +38,7 @@ class Request
                     'proxy' => $this->proxy ?: null
                 ]);
             $this->last_url = $url;
-            return $response->getBody()->getContents();
+            return $this->convertResponse($response->getBody()->getContents());
         } catch (\GuzzleHttp\Exception\GuzzleException $e) {
             Log::debug("get fail {$url['url']} " . $e->getMessage());
             return false;
@@ -64,12 +64,23 @@ class Request
         $results = [];
         foreach ($promises as $key => $promise) {
             try {
-                $results[$key] = $promise->wait()->getBody()->getContents();
+                $results[$key] = $this->convertResponse($promise->wait()->getBody()->getContents());
             } catch (\GuzzleHttp\Exception\GuzzleException $e) {
                 Log::debug("get fail {$url['url']} " . $e->getMessage());
                 $results[$key] = false;
             }
         }
         return $results;
+    }
+
+    public function convertResponse($response)
+    {
+        $response_charset = mb_detect_encoding($response, ['UTF-8', 'GBK', 'GB2312', 'LATIN1', 'ASCII', 'BIG5', 'ISO-8859-1']);
+        if ($response_charset != 'UTF-8') {
+            $response = mb_convert_encoding($response, 'UTF-8', $response_charset);
+            $pattern = '/<meta[^>]*?charset=.*?>/i';
+            $response = preg_replace($pattern, '', $response, 1);
+        }
+        return $response;
     }
 }
