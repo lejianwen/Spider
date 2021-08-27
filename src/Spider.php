@@ -14,6 +14,7 @@ class Spider
     public $filter_url;
     protected $using_proxy_index = 0; //使用的代理索引
     public $empty_queue_func;
+    protected $redis;
 
     public function __construct($config)
     {
@@ -24,10 +25,11 @@ class Spider
                 echo "task_num > 1 must redis \n";
                 exit;
             }
-            Redis::_instance($this->config['redis']);
-            $this->wait_queue = new Queue('redis');
-            $this->all_queue = new AllQueue('redis');
-            $this->status = new Status('redis', $this->config['server_id'] ?? 1);
+            $redis = Redis::_instance($this->config['redis']);
+            $this->redis = $redis;
+            $this->wait_queue = new Queue($redis);
+            $this->all_queue = new AllQueue($redis);
+            $this->status = new Status($redis, $this->config['server_id'] ?? 1);
         } else {
             $this->wait_queue = new Queue();
             $this->all_queue = new AllQueue();
@@ -92,6 +94,10 @@ class Spider
                 } else {
                     $this->task_id = $i;
                     Log::$task_id = $this->task_id;
+                    /*if (!empty($this->config['proxy'])) {
+                        $this->using_proxy_index = array_rand($this->config['proxy']);
+                    }*/
+                    $this->using_proxy_index = $i;
                     $this->status->setTaskId($this->task_id);
                     $this->task();
                     break;
@@ -104,7 +110,7 @@ class Spider
 
     public function task()
     {
-        Redis::_instance()->disConnect();
+        $this->redis->disConnect();
         $this->upTaskStatus('start_time', microtime(true));
         $request = new Request($this->config['guzzle'] ?? []);
         if (isset($this->config['multi_num']) && $this->config['multi_num'] > 1) {
@@ -134,15 +140,19 @@ class Spider
                 //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
                 if (!empty($this->config['proxy'])) {
                     $request = new Request($this->config['guzzle'] ?? []);
-                    $request->setProxy($this->useProxy());
+                    $request->setProxy($this->useProxy($url));
                 }
                 $responses = $request->requestAsync($wait_urls);
                 foreach ($responses as $url => $response) {
                     $this->response($url, $response);
                 }
                 $this->upTaskStatus('memory', memory_get_usage(true));
-                if (isset($this->config['interval']) && $this->config['interval'] > 0) {
-                    usleep($this->config['interval'] * 1000);
+                if (isset($this->config['interval'])) {
+                    if (is_array($this->config['interval'])) {
+                        usleep(random_int($this->config['interval'][0], $this->config['interval'][1]) * 1000);
+                    } elseif ($this->config['interval'] > 0) {
+                        usleep($this->config['interval'] * 1000);
+                    }
                 }
             }
         } else {
@@ -166,13 +176,17 @@ class Spider
                 //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
                 if (!empty($this->config['proxy'])) {
                     $request = new Request($this->config['guzzle'] ?? []);
-                    $request->setProxy($this->useProxy());
+                    $request->setProxy($this->useProxy($url));
                 }
                 $response = $request->request($url);
                 $this->response($url['url'], $response);
                 $this->upTaskStatus('memory', memory_get_usage(true));
-                if (isset($this->config['interval']) && $this->config['interval'] > 0) {
-                    usleep($this->config['interval'] * 1000);
+                if (isset($this->config['interval'])) {
+                    if (is_array($this->config['interval'])) {
+                        usleep(random_int($this->config['interval'][0], $this->config['interval'][1]) * 1000);
+                    } elseif ($this->config['interval'] > 0) {
+                        usleep($this->config['interval'] * 1000);
+                    }
                 }
             }
         }
@@ -366,7 +380,12 @@ class Spider
                     }
                 }
             } else {
-                Log::debug("get success {$url} , but response is empty ");
+                Log::debug("get success {$url} , but response is empty, retry");
+                //重试
+                $info = $this->all_queue[$url];
+                if ($info['try_num'] < $this->config['max_try_num']) {
+                    $this->wait_queue->enqueue($info);
+                }
             }
         }
     }
@@ -413,7 +432,7 @@ class Spider
     {
         $statuses = [];
         for ($i = 0; $i < $this->config['task_num']; $i++) {
-            $statuses[] = new Status('redis', 1, $i);
+            $statuses[] = new Status($this->redis, 1, $i);
         }
         echo "\033[2J";
         while (1) {
@@ -447,15 +466,22 @@ class Spider
         }
     }
 
-    public function useProxy()
+    public function useProxy($url)
     {
         if (!empty($this->config['proxy'])) {
-            $this->using_proxy_index++;
-            if ($this->using_proxy_index >= count($this->config['proxy'])) {
-                $this->using_proxy_index = 0;
+            if (is_array($this->config['proxy'])) {
+                $this->using_proxy_index++;
+                if ($this->using_proxy_index >= count($this->config['proxy'])) {
+                    $this->using_proxy_index = 0;
+                }
+                Log::debug("use proxy {$this->config['proxy'][$this->using_proxy_index]}");
+                return $this->config['proxy'][$this->using_proxy_index];
             }
-            Log::debug("use proxy {$this->config['proxy'][$this->using_proxy_index]}");
-            return $this->config['proxy'][$this->using_proxy_index];
+            if ($this->config['proxy'] instanceof \Closure) {
+                $proxy = $this->config['proxy']($url);
+                Log::debug("use proxy {$proxy}");
+                return $proxy;
+            }
         }
         return null;
     }

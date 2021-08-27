@@ -17,10 +17,11 @@ class Redis
     public static function _instance($config = [])
     {
         static $store;
-        if (!$store) {
-            $store = new static($config);
+        $key = md5(json_encode($config));
+        if (empty($store[$key])) {
+            $store[$key] = new static($config);
         }
-        return $store;
+        return $store[$key];
     }
 
     public function __construct($config)

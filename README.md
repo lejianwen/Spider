@@ -18,8 +18,10 @@ $config = [
     'max_depth' => 0,
     'task_num' => 1, //
     'log_filename' => 'spider.log',
+     'show_task_panel' => 0, //是否显示状态面板
 //            'log_show' => 1,
 //            'multi_num' => 5, //guzzle 并发请求,开启多任务时不建议开启
+     'interval' => [500, 1200], //请求间隔，一个数字 或者 数组指定最小最大间隔， 单位毫秒
     'guzzle' => [
         'verify' => false, //建议false,不校验https
         'headers' => [
@@ -36,6 +38,9 @@ $config = [
         'prefix' => 'lll:',
         'timeout' => 30,
     ],
+    //代理数组 或者 闭包函数
+    'proxy' => [], 
+    //'proxy' => function($url_info){},
     // pages
     'pages' => [
         [

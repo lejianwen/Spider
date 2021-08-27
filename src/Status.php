@@ -13,13 +13,15 @@ class Status implements \ArrayAccess
     protected $task_id;
     protected $server_id;
 
-    public function __construct($type = '', $server_id = 1, $task_id = 0)
+    public function __construct($redis = null, $server_id = 1, $task_id = 0)
     {
-        $this->type = $type;
+        if ($redis) {
+            $this->type = 'redis';
+        }
         $this->task_id = $task_id;
         $this->server_id = $server_id;
-        if ($type == 'redis') {
-            $this->client = Redis::_instance();
+        if ($this->type == 'redis') {
+            $this->client = $redis;
         } else {
             $this->client = [];
             $this->client[$this->key()] = [];
