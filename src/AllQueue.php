@@ -11,12 +11,14 @@ class AllQueue implements \ArrayAccess, \Countable
     protected $client;
     protected $redis_key;
 
-    public function __construct($type = '', $redis_key = 'lwf:spider:all:queue')
+    public function __construct($redis = null, $redis_key = 'lwf:spider:all:queue')
     {
-        $this->type = $type;
-        if ($type == 'redis') {
+        if ($redis) {
+            $this->type = 'redis';
+        }
+        if ($this->type == 'redis') {
             $this->redis_key = $redis_key;
-            $this->client = Redis::_instance();
+            $this->client = $redis;
         } else {
             $this->client = [];
         }

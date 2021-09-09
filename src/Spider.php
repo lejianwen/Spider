@@ -111,7 +111,7 @@ class Spider
     public function task()
     {
         $this->redis->disConnect();
-        $this->upTaskStatus('start_time', microtime(true));
+        $this->resetStatus();
         $request = new Request($this->config['guzzle'] ?? []);
         if (isset($this->config['multi_num']) && $this->config['multi_num'] > 1) {
             while (1) {
@@ -334,7 +334,10 @@ class Spider
         $info['try_num']++;
         $info['status'] = 1;
         $this->all_queue[$url] = $info;
-        $this->upTaskStatus('success_num', 1);
+        if ($this->status) {
+            $this->status['request_num'] += 1;
+            $this->status['success_num'] += 1;
+        }
     }
 
     public function fail($url)
@@ -344,7 +347,10 @@ class Spider
         $info['try_num']++;
         $info['status'] = -1;
         $this->all_queue[$url] = $info;
-        $this->upTaskStatus('fail_num', 1);
+        if ($this->status) {
+            $this->status['request_num'] += 1;
+            $this->status['fail_num'] += 1;
+        }
     }
 
     public function response($url, $response)
@@ -419,13 +425,17 @@ class Spider
     public function upTaskStatus($type, $value)
     {
         if ($this->status) {
-            if ($type == 'success_num' || $type == 'fail_num') {
-                $this->status[$type] += 1;
-                $this->status['request_num'] += 1;
-            } else {
-                $this->status[$type] = $value;
-            }
+            $this->status[$type] = $value;
         }
+    }
+
+    public function resetStatus()
+    {
+        $this->upTaskStatus('start_time', microtime(true));
+        $this->upTaskStatus('request_num', 0);
+        $this->upTaskStatus('success_num', 0);
+        $this->upTaskStatus('fail_num', 0);
+        $this->upTaskStatus('memory', memory_get_usage(true));
     }
 
     public function panel()
@@ -485,5 +495,4 @@ class Spider
         }
         return null;
     }
-
 }

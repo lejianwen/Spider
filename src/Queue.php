@@ -7,7 +7,7 @@ namespace Ljw\Spider;
 class Queue implements \ArrayAccess, \Countable
 {
     protected $type;
-    /** @var Redis|\Redis|array client */
+    /** @var Redis|\Redis|array $client */
     protected $client;
     protected $redis_key;
 
@@ -61,6 +61,15 @@ class Queue implements \ArrayAccess, \Countable
             if ($this[$offset]) {
                 unset($this->client[$offset]);
             }
+        }
+    }
+
+    public function unshift($value)
+    {
+        if ($this->type == 'redis') {
+            return $this->client->rPush($this->redis_key, json_encode($value, JSON_UNESCAPED_UNICODE));
+        } else {
+            return $this->client->unshift($value);
         }
     }
 

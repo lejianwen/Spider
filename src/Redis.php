@@ -12,7 +12,7 @@ class Redis
 
     /**
      * @param $config
-     * @return mixed|static
+     * @return mixed|static|\Redis
      */
     public static function _instance($config = [])
     {
