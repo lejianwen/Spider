@@ -46,7 +46,7 @@ class AllQueue implements \ArrayAccess, \Countable
     public function offsetSet($offset, $value)
     {
         if ($this->type == 'redis') {
-            $value = json_encode($value, JSON_UNESCAPED_UNICODE);
+            $value = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             $this->client->hSet($this->redis_key, $offset, $value);
         } else {
             $this->client[$offset] = $value;

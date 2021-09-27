@@ -126,7 +126,7 @@ class Spider
                         if (!$url) {
                             continue;
                         }
-                        $wait_urls[] = $url;
+                        $wait_urls[] = $this->urlInfo($url);
                     } else {
                         usleep(100);
                         $wait_count++;
@@ -140,11 +140,11 @@ class Spider
                 //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
                 if (!empty($this->config['proxy'])) {
                     $request = new Request($this->config['guzzle'] ?? []);
-                    $request->setProxy($this->useProxy($url));
+                    $request->setProxy($this->useProxy($wait_urls));
                 }
                 $responses = $request->requestAsync($wait_urls);
                 foreach ($responses as $url => $response) {
-                    $this->response($url, $response);
+                    $this->response($this->urlInfo($url), $response);
                 }
                 $this->upTaskStatus('memory', memory_get_usage(true));
                 if (isset($this->config['interval'])) {
@@ -173,13 +173,14 @@ class Spider
                     Log::debug("dequeue null");
                     continue;
                 }
+                $url_info = $this->urlInfo($url);
                 //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
                 if (!empty($this->config['proxy'])) {
                     $request = new Request($this->config['guzzle'] ?? []);
-                    $request->setProxy($this->useProxy($url));
+                    $request->setProxy($this->useProxy($url_info));
                 }
-                $response = $request->request($url);
-                $this->response($url['url'], $response);
+                $response = $request->request($url_info);
+                $this->response($url_info, $response);
                 $this->upTaskStatus('memory', memory_get_usage(true));
                 if (isset($this->config['interval'])) {
                     if (is_array($this->config['interval'])) {
@@ -196,9 +197,10 @@ class Spider
      * 构造url结构
      * @param $url
      * @param array $cur_url
+     * @param array $extra 额外信息
      * @return array|boolean
      */
-    public function makeUrl($url, $cur_url = [])
+    public function makeUrl($url, $cur_url = [], $extra = [])
     {
         $url = trim($url);
         if (!$url
@@ -246,8 +248,14 @@ class Spider
             ],
             'try_num' => 0,
             'depth' => ($cur_url['depth'] ?? 0) + 1,
-            'status' => 0
+            'status' => 0,
+            'extra' => $extra
         ];
+    }
+
+    public function urlInfo($url)
+    {
+        return $this->all_queue[$url];
     }
 
     /**
@@ -257,15 +265,15 @@ class Spider
      * @param bool $filter 是否过滤
      * @return bool
      */
-    public function addUrl($url, $cur_url = [], $repeat = false, $filter = true)
+    public function addUrl($url, $cur_url = [], $repeat = false, $filter = true, $extra = [])
     {
-        $url_info = $this->makeUrl($url, $cur_url);
+        $url_info = $this->makeUrl($url, $cur_url, $extra);
         if (!$url_info) {
             return false;
         }
 
         if (!$repeat) {
-            $ex = $this->all_queue[$url_info['url']];
+            $ex = $this->urlInfo($url_info['url']);
             if (!empty($ex) && $ex['status'] > -1) {
                 //已经添加过了
                 return false;
@@ -287,20 +295,20 @@ class Spider
         }
 
         $this->all_queue[$url] = $url_info;
-        $this->wait_queue->enqueue($url_info);
+        $this->wait_queue->enqueue($url);
         Log::debug("add {$url} ");
         return true;
     }
 
-    public function unshiftUrl($url, $cur_url = [], $repeat = false, $filter = true)
+    public function unshiftUrl($url, $cur_url = [], $repeat = false, $filter = true, $extra = [])
     {
-        $url_info = $this->makeUrl($url, $cur_url);
+        $url_info = $this->makeUrl($url, $cur_url, $extra);
         if (!$url_info) {
             return false;
         }
 
         if (!$repeat) {
-            $ex = $this->all_queue[$url_info['url']];
+            $ex = $this->urlInfo($url_info['url']);
             if (!empty($ex) && $ex['status'] > -1) {
                 //已经添加过了
                 return false;
@@ -322,49 +330,46 @@ class Spider
         }
 
         $this->all_queue[$url] = $url_info;
-        $this->wait_queue->unshift($url_info);
+        $this->wait_queue->unshift($url);
         Log::debug("unshift {$url} ");
         return true;
     }
 
-    public function success($url)
+    public function success($url_info)
     {
-        Log::debug("get success {$url} ");
-        $info = $this->all_queue[$url];
-        $info['try_num']++;
-        $info['status'] = 1;
-        $this->all_queue[$url] = $info;
+        Log::debug("get success {$url_info['url']} ");
+        $url_info['try_num']++;
+        $url_info['status'] = 1;
+        $this->all_queue[$url_info['url']] = $url_info;
         if ($this->status) {
             $this->status['request_num'] += 1;
             $this->status['success_num'] += 1;
         }
     }
 
-    public function fail($url)
+    public function fail($url_info)
     {
-        Log::debug("get fail {$url} ");
-        $info = $this->all_queue[$url];
-        $info['try_num']++;
-        $info['status'] = -1;
-        $this->all_queue[$url] = $info;
+        Log::debug("get fail {$url_info['url']} ");
+        $url_info['try_num']++;
+        $url_info['status'] = -1;
+        $this->all_queue[$url_info['url']] = $url_info;
         if ($this->status) {
             $this->status['request_num'] += 1;
             $this->status['fail_num'] += 1;
         }
     }
 
-    public function response($url, $response)
+    public function response($url_info, $response)
     {
         if ($response === false) {
-            $this->fail($url);
-            $info = $this->all_queue[$url];
+            $this->fail($url_info);
             //重试
-            if ($info['try_num'] < $this->config['max_try_num']) {
-                $this->wait_queue->enqueue($info);
-                Log::debug("retry {$url} ");
+            if ($url_info['try_num'] < $this->config['max_try_num']) {
+                $this->wait_queue->enqueue($url_info['url']);
+                Log::debug("retry {$url_info['url']} ");
             }
         } else {
-            $this->success($url);
+            $this->success($url_info);
             if ($response) {
                 //to utf-8
                 $response = $this->convertResponse($response);
@@ -372,25 +377,24 @@ class Spider
                 $html_a = $this->html_parse->select($response, "//a/@href");
                 if (!empty($html_a)) {
                     foreach ($html_a as $a) {
-                        $this->addUrl($a, $this->all_queue[$url]);
+                        $this->addUrl($a, $url_info);
                     }
                 }
                 foreach ($this->config['pages'] as $page) {
-                    if (preg_match('#^' . $page['url'] . '$#', $url)) {
+                    if (preg_match('#^' . $page['url'] . '$#', $url_info['url'])) {
                         //匹配到page
                         $data = $this->select($response, $page);
 
                         if (!empty($page['callback'])) {
-                            $page['callback']($data, $url, $response, $this);
+                            $page['callback']($data, $url_info['url'], $response, $this);
                         }
                     }
                 }
             } else {
-                Log::debug("get success {$url} , but response is empty, retry");
+                Log::debug("get success {$url_info['url']} , but response is empty, retry");
                 //重试
-                $info = $this->all_queue[$url];
-                if ($info['try_num'] < $this->config['max_try_num']) {
-                    $this->wait_queue->enqueue($info);
+                if ($url_info['try_num'] < $this->config['max_try_num']) {
+                    $this->wait_queue->enqueue($url_info['url']);
                 }
             }
         }
@@ -494,5 +498,10 @@ class Spider
             }
         }
         return null;
+    }
+
+    public function getConfig()
+    {
+        return $this->config;
     }
 }
