@@ -1,11 +1,13 @@
 # A simple spider
 
 ## install
+
 ~~~
 composer require ljw/spider:dev-master
 ~~~
 
 ## example
+
 ~~~php
 
 require __DIR__ . '/../vendor/autoload.php';
@@ -18,18 +20,24 @@ $config = [
     'max_depth' => 0,
     'task_num' => 1, //
     'log_filename' => 'spider.log',
-     'show_task_panel' => 0, //是否显示状态面板
 //            'log_show' => 1,
 //            'multi_num' => 5, //guzzle 并发请求,开启多任务时不建议开启
-     'interval' => [500, 1200], //请求间隔，一个数字 或者 数组指定最小最大间隔， 单位毫秒
+    'interval' => [500, 1200], //请求间隔，一个数字 或者 数组指定最小最大间隔， 单位毫秒
+    'auto_add' => false, //是否自动解析页面所有a标签
+    'ask_continue' => 'clear', // clear 直接清空， continue 直接继续， ask 询问
+    'show_task_panel' => 1, //show task status
     'guzzle' => [
         'verify' => false, //建议false,不校验https
         'headers' => [
-            'User-Agent' => 'ljw-spider',
+            'User-Agent' => 'ljw',
             'Client-Ip' => '127.0.0.1',
-            'timeout' => 3
+            'timeout' => 10
         ]
     ],
+    //代理数组 或者 闭包函数
+    'proxy' => [], 
+    //'proxy' => function($url_info){},
+    'queue_redis' => 1, //是否使用redis, task_num >1 是强制使用
     'redis' => [
         'host' => '127.0.0.1',
         'port' => 6379,
@@ -38,10 +46,6 @@ $config = [
         'prefix' => 'lll:',
         'timeout' => 30,
     ],
-    //代理数组 或者 闭包函数
-    'proxy' => [], 
-    //'proxy' => function($url_info){},
-    // pages
     'pages' => [
         [
             'url' => 'http://www.ibookv.com/book/\d+\.html',
@@ -83,7 +87,7 @@ $config = [
             ],
             'only_one' => 1,
             'callback' => function ($data, $html) {
-//                        var_dump($data);
+//                var_dump($data);
             }
         ],
         [
@@ -94,9 +98,15 @@ $config = [
 //                        var_dump($data);
             }
         ]
-    ]
+    ],
+    'reload_func' => function ($spider) {
+    },
 
 ];
 $spider = new Ljw\Spider\Spider($config);
+//空队列时
+$spider->empty_queue_func = function ($spider) {
+    $spider->reset();
+};
 $spider->start();
 ~~~

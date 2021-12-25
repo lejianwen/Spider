@@ -46,7 +46,7 @@ class Request
             }
             return $this->convertResponse($response->getBody()->getContents(), $charset);
         } catch (\GuzzleHttp\Exception\GuzzleException $e) {
-            Log::debug("get fail {$url['url']} " . $e->getMessage());
+            Log::debug("get fail {$url['url']} by proxy {$this->proxy} " . $e->getMessage());
             return false;
         }
     }
@@ -76,7 +76,6 @@ class Request
                     preg_match('/charset\=(.*)?\;?/', $content_type, $match);
                     $charset = $match[1] ?? '';
                 }
-                var_dump($charset);
                 $results[$key] = $this->convertResponse($promise->wait()->getBody()->getContents(), $charset);
             } catch (\GuzzleHttp\Exception\GuzzleException $e) {
                 $results[$key] = false;

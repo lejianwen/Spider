@@ -9,17 +9,18 @@ class Spider
     protected $all_queue;
     protected $config = [];
     protected $html_parse;
+    /** @var Status $status */
     protected $status;
     protected $task_id = 0;
     public $filter_url;
     protected $using_proxy_index = 0; //使用的代理索引
     public $empty_queue_func;
+    /** @var Redis|\Redis $redis */
     protected $redis;
 
     public function __construct($config)
     {
-        $this->config = $config;
-        $this->config['task_num'] = $this->config['task_num'] ?? 1;
+        $this->updateConfig($config);
         if (!empty($this->config['queue_redis']) || $this->config['task_num'] > 1) {
             if (empty($this->config['redis'])) {
                 echo "task_num > 1 must redis \n";
@@ -29,21 +30,20 @@ class Spider
             $this->redis = $redis;
             $this->wait_queue = new Queue($redis);
             $this->all_queue = new AllQueue($redis);
-            $this->status = new Status($redis, $this->config['server_id'] ?? 1);
+            $this->status = new Status($redis, $this->config['server_id']);
         } else {
             $this->wait_queue = new Queue();
             $this->all_queue = new AllQueue();
             $this->status = new Status();
         }
         $this->html_parse = new HtmlParse();
-
-        Log::$show = $this->config['log_show'] ?? false;
-        Log::$filename = $this->config['log_filename'] ?? '';
     }
 
     public function ready()
     {
-        if ((!empty($this->config['queue_redis']) || $this->config['task_num'] > 1) && (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0)) {
+        if ($this->config['ask_continue'] == 'ask'
+            && (!empty($this->config['queue_redis']) || $this->config['task_num'] > 1)
+            && (!$this->wait_queue->isEmpty() || count($this->all_queue) > 0)) {
             $msg = "Old data in Redis, continue? no will clean data, default is yes \n";
             $msg .= 'continue? [Y/n]';
             fwrite(STDOUT, $msg);
@@ -55,13 +55,21 @@ class Spider
                 $this->clear();
             }
         }
+        if ($this->config['ask_continue'] == 'clear') {
+            $this->clear();
+        }
+//        if ($this->config['ask_continue'] == 'continue') {
+//            //
+//        }
+        $this->addEntries();
+    }
 
-        if ($this->wait_queue->isEmpty()) {
-            $entries = (array)$this->config['entry'];
-            foreach ($entries as $entry) {
-                //等待队列为空,入口页面强制加入
-                $this->addUrl($entry, [], true, false);
-            }
+    public function addEntries()
+    {
+        $entries = (array)$this->config['entry'];
+        foreach ($entries as $entry) {
+            //等待队列为空,入口页面强制加入
+            $this->addUrl($entry, [], true, false);
         }
     }
 
@@ -110,11 +118,14 @@ class Spider
 
     public function task()
     {
-        $this->redis->disConnect();
+        if ($this->redis) {
+            $this->redis->disConnect();
+        }
         $this->resetStatus();
         $request = new Request($this->config['guzzle'] ?? []);
         if (isset($this->config['multi_num']) && $this->config['multi_num'] > 1) {
             while (1) {
+                $this->checkStatus();
                 //空转次数
                 $wait_count = 0;
                 $wait_urls = [];
@@ -133,6 +144,7 @@ class Spider
                     }
                 }
                 if (empty($wait_urls)) {
+                    $this->upTaskStatus('status', 'empty');
                     usleep(100);
                     continue;
                 }
@@ -146,7 +158,8 @@ class Spider
                 foreach ($responses as $url => $response) {
                     $this->response($this->urlInfo($url), $response);
                 }
-                $this->upTaskStatus('memory', memory_get_usage(true));
+
+                $this->nextStatus();
                 if (isset($this->config['interval'])) {
                     if (is_array($this->config['interval'])) {
                         usleep(random_int($this->config['interval'][0], $this->config['interval'][1]) * 1000);
@@ -157,8 +170,10 @@ class Spider
             }
         } else {
             while (1) {
+                $this->checkStatus();
                 if ($this->wait_queue->isEmpty()) {
                     Log::debug("dequeue null");
+                    $this->upTaskStatus('status', 'empty');
                     sleep(1);
 
                     if ($this->empty_queue_func) {
@@ -181,7 +196,8 @@ class Spider
                 }
                 $response = $request->request($url_info);
                 $this->response($url_info, $response);
-                $this->upTaskStatus('memory', memory_get_usage(true));
+
+                $this->nextStatus();
                 if (isset($this->config['interval'])) {
                     if (is_array($this->config['interval'])) {
                         usleep(random_int($this->config['interval'][0], $this->config['interval'][1]) * 1000);
@@ -294,9 +310,9 @@ class Spider
             }
         }
 
-        $this->all_queue[$url] = $url_info;
-        $this->wait_queue->enqueue($url);
-        Log::debug("add {$url} ");
+        $this->all_queue[$url_info['url']] = $url_info;
+        $this->wait_queue->enqueue($url_info['url']);
+        Log::debug("add {$url_info['url']} ");
         return true;
     }
 
@@ -329,9 +345,9 @@ class Spider
             }
         }
 
-        $this->all_queue[$url] = $url_info;
-        $this->wait_queue->unshift($url);
-        Log::debug("unshift {$url} ");
+        $this->all_queue[$url_info['url']] = $url_info;
+        $this->wait_queue->unshift($url_info['url']);
+        Log::debug("unshift {$url_info['url']} ");
         return true;
     }
 
@@ -374,10 +390,12 @@ class Spider
                 //to utf-8
                 $response = $this->convertResponse($response);
                 //解析页面所有链接
-                $html_a = $this->html_parse->select($response, "//a/@href");
-                if (!empty($html_a)) {
-                    foreach ($html_a as $a) {
-                        $this->addUrl($a, $url_info);
+                if ($this->config['auto_add']) {
+                    $html_a = $this->html_parse->select($response, "//a/@href");
+                    if (!empty($html_a)) {
+                        foreach ($html_a as $a) {
+                            $this->addUrl($a, $url_info);
+                        }
                     }
                 }
                 foreach ($this->config['pages'] as $page) {
@@ -436,9 +454,12 @@ class Spider
     public function resetStatus()
     {
         $this->upTaskStatus('start_time', microtime(true));
+        $this->upTaskStatus('last_time', microtime(true));
         $this->upTaskStatus('request_num', 0);
         $this->upTaskStatus('success_num', 0);
         $this->upTaskStatus('fail_num', 0);
+        $this->upTaskStatus('status', 'running');
+        $this->upTaskStatus('next', '');
         $this->upTaskStatus('memory', memory_get_usage(true));
     }
 
@@ -480,7 +501,7 @@ class Spider
         }
     }
 
-    public function useProxy($url)
+    public function useProxy($url = null)
     {
         if (!empty($this->config['proxy'])) {
             if (is_array($this->config['proxy'])) {
@@ -503,5 +524,103 @@ class Spider
     public function getConfig()
     {
         return $this->config;
+    }
+
+    public function updateConfig($conf = [])
+    {
+        $this->config = array_merge($this->config, $conf);
+
+        $this->config['task_num'] = $this->config['task_num'] ?? 1;
+        $this->config['ask_continue'] = $this->config['ask_continue'] ?? 'continue';
+        $this->config['auto_add'] = $this->config['auto_add'] ?? false;
+        $this->config['server_id'] = $this->config['server_id'] ?? 1;
+        Log::$show = $this->config['log_show'] ?? false;
+        Log::$filename = $this->config['log_filename'] ?? '';
+    }
+
+    protected function checkStatus()
+    {
+        $next_status = $this->status['next'];
+        if ($next_status == 'reload') {
+            Log::debug('reload');
+            if ($this->config['reload_func']) {
+                $this->config['reload_func']($this);
+            }
+            $this->upTaskStatus('next', '');
+        } elseif ($next_status == 'exit') {
+            Log::debug('exit');
+            $this->status->clear();
+            exit;
+        }
+    }
+
+    protected function nextStatus()
+    {
+        $this->upTaskStatus('status', 'running');
+        $this->upTaskStatus('memory', memory_get_usage(true));
+        $this->upTaskStatus('last_time', microtime(true));
+    }
+
+    /**
+     * 重置，进程内调用
+     */
+    public function reset()
+    {
+        Log::debug('ready reset');
+        $nx_key = 'sp:reset';
+        $lock = $this->redis->set($nx_key, 1, ['nx', 'ex' => 5]);
+        if ($lock) {
+            $all_empty = true;
+            //获取所有进程状态
+            for ($i = 0; $i < $this->config['task_num']; $i++) {
+                $st = new Status($this->redis, $this->config['server_id'], $i);
+                if ($st['status'] != 'empty') {
+                    $all_empty = false;
+                    break;
+                }
+            }
+            if ($all_empty) {
+                $this->wait_queue->clear();
+                $this->all_queue->clear();
+                $this->addEntries();
+                //等待锁自己过期
+                Log::debug('reset success');
+            } else {
+                $this->redis->del($nx_key);
+            }
+        } else {
+            Log::debug('reset waiting');
+            //等待其他进程重置
+            sleep(10);
+        }
+    }
+
+    /**
+     * 准备退出，由外部进程调用
+     */
+    public function readyExit()
+    {
+        $nx_key = 'sp:rd:exit';
+        $lock = $this->redis->set($nx_key, 1, ['nx', 'ex' => 5]);
+        if ($lock) {
+            for ($i = 0; $i < $this->config['task_num']; $i++) {
+                $this->status->setTaskId($i);
+                $this->upTaskStatus('next', 'exit');
+            }
+            $this->redis->del($nx_key);
+        }
+    }
+
+    public function clearStatus()
+    {
+        $nx_key = 'sp:cl:st';
+        $lock = $this->redis->set($nx_key, 1, ['nx', 'ex' => 5]);
+        if ($lock) {
+            for ($i = 0; $i < $this->config['task_num']; $i++) {
+                $this->status->setTaskId($i);
+                $this->status->clear();
+            }
+            $this->redis->del($nx_key);
+        }
     }
 }

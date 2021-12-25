@@ -12,6 +12,8 @@ $config = [
     'log_filename' => 'spider.log',
 //            'log_show' => 1,
 //            'multi_num' => 5, //guzzle 并发请求,开启多任务时不建议开启
+    'auto_add' => false, //是否自动解析页面所有a标签
+    'ask_continue' => 'clear', // clear 直接清空， continue 直接继续， ask 询问
     'show_task_panel' => 1, //show task status
     'guzzle' => [
         'verify' => false, //建议false,不校验https
@@ -34,7 +36,6 @@ $config = [
         'prefix' => 'lll:',
         'timeout' => 30,
     ],
-
     'pages' => [
         [
             'url' => 'http://www.ibookv.com/book/\d+\.html',
@@ -87,8 +88,14 @@ $config = [
 //                        var_dump($data);
             }
         ]
-    ]
+    ],
+    'reload_func' => function ($spider) {
+    },
 
 ];
 $spider = new Ljw\Spider\Spider($config);
+//空队列时
+$spider->empty_queue_func = function ($spider) {
+    $spider->reset();
+};
 $spider->start();
