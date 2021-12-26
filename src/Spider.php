@@ -125,7 +125,7 @@ class Spider
         $request = new Request($this->config['guzzle'] ?? []);
         if (isset($this->config['multi_num']) && $this->config['multi_num'] > 1) {
             while (1) {
-                $this->checkStatus();
+                $this->checkStatusCmd();
                 //空转次数
                 $wait_count = 0;
                 $wait_urls = [];
@@ -170,7 +170,7 @@ class Spider
             }
         } else {
             while (1) {
-                $this->checkStatus();
+                $this->checkStatusCmd();
                 if ($this->wait_queue->isEmpty()) {
                     Log::debug("dequeue null");
                     $this->upTaskStatus('status', 'empty');
@@ -459,7 +459,6 @@ class Spider
         $this->upTaskStatus('success_num', 0);
         $this->upTaskStatus('fail_num', 0);
         $this->upTaskStatus('status', 'running');
-        $this->upTaskStatus('next', '');
         $this->upTaskStatus('memory', memory_get_usage(true));
     }
 
@@ -501,7 +500,7 @@ class Spider
         }
     }
 
-    public function useProxy($url = null)
+    public function useProxy($url_info = null)
     {
         if (!empty($this->config['proxy'])) {
             if (is_array($this->config['proxy'])) {
@@ -513,7 +512,7 @@ class Spider
                 return $this->config['proxy'][$this->using_proxy_index];
             }
             if ($this->config['proxy'] instanceof \Closure) {
-                $proxy = $this->config['proxy']($url);
+                $proxy = $this->config['proxy']($url_info);
                 Log::debug("use proxy {$proxy}");
                 return $proxy;
             }
@@ -538,16 +537,15 @@ class Spider
         Log::$filename = $this->config['log_filename'] ?? '';
     }
 
-    protected function checkStatus()
+    protected function checkStatusCmd()
     {
-        $next_status = $this->status->loadFromRemote('next');
+        $next_status = $this->status->getCmd();
         if ($next_status == 'reload') {
             Log::debug('reload');
             if ($this->config['reload_func']) {
                 $this->config['reload_func']($this);
             }
-            $this->upTaskStatus('next', '');
-            $this->status->sync();
+            $this->status->setCmd('');
         } elseif ($next_status == 'exit') {
             Log::debug('exit');
             $this->status->clear();
@@ -575,7 +573,7 @@ class Spider
             //获取所有进程状态
             for ($i = 0; $i < $this->config['task_num']; $i++) {
                 $st = new Status($this->redis, $this->config['server_id'], $i);
-                if ($st['status'] != 'empty') {
+                if ($st->loadFromRemote('status') != 'empty') {
                     $all_empty = false;
                     break;
                 }
@@ -587,6 +585,7 @@ class Spider
                 //等待锁自己过期,如果过快，可能一个进程释放锁，另一个立马就获得了
                 Log::debug('reset success');
             } else {
+                Log::debug('cancel reset, because one running');
                 $this->redis->del($nx_key);
             }
         } else {
@@ -606,21 +605,7 @@ class Spider
         if ($lock) {
             for ($i = 0; $i < $this->config['task_num']; $i++) {
                 $this->status->setTaskId($i);
-                $this->upTaskStatus('next', 'exit');
-                $this->status->sync();
-            }
-            $this->redis->del($nx_key);
-        }
-    }
-
-    public function clearStatus()
-    {
-        $nx_key = 'sp:cl:st';
-        $lock = $this->redis->set($nx_key, 1, ['nx', 'ex' => 5]);
-        if ($lock) {
-            for ($i = 0; $i < $this->config['task_num']; $i++) {
-                $this->status->setTaskId($i);
-                $this->status->clear();
+                $this->status->setCmd('exit');
             }
             $this->redis->del($nx_key);
         }

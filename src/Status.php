@@ -59,6 +59,7 @@ class Status implements \ArrayAccess
     {
         if ($this->type == 'redis') {
             $this->client->del($this->key());
+            $this->client->del($this->cmdKey());
         } else {
             $this->value = [];
         }
@@ -102,6 +103,28 @@ class Status implements \ArrayAccess
             }
         }
         return null;
+    }
+
+    public function cmdKey()
+    {
+        return $this->key() . ':cmd';
+    }
+
+    public function getCmd()
+    {
+        if ($this->client) {
+            return $this->client->get($this->cmdKey());
+        } else {
+            return '';
+        }
+    }
+
+    public function setCmd($value)
+    {
+        if ($this->client) {
+            $this->client->set($this->cmdKey(), $value);
+        } else {
+        }
     }
 }
 
