@@ -9,60 +9,44 @@ class Status implements \ArrayAccess
     protected $type;
     /** @var Redis|\Redis client */
     protected $client;
+    protected $value;
     protected $redis_key = 'lwf:spider:status';
     protected $task_id;
     protected $server_id;
+    protected $last_time; //上次同步时间
 
     public function __construct($redis = null, $server_id = 1, $task_id = 0)
     {
-        if ($redis) {
-            $this->type = 'redis';
-        }
         $this->task_id = $task_id;
         $this->server_id = $server_id;
-        if ($this->type == 'redis') {
+        if ($redis) {
+            $this->type = 'redis';
+            $this->value = [];
             $this->client = $redis;
-        } else {
-            $this->client = [];
-            $this->client[$this->key()] = [];
         }
+
     }
 
     public function offsetExists($offset)
     {
-        if ($this->type == 'redis') {
-            return $this->client->hExists($this->key(), $offset);
-        } else {
-            return $this->client[$this->key()][$offset] ?? false;
-        }
+        return $this->value[$offset] ?? false;
     }
 
     public function offsetGet($offset)
     {
-        if ($this->type == 'redis') {
-            return $this->client->hGet($this->key(), $offset);
-        } else {
-            return $this->client[$this->key()][$offset] ?? null;
-        }
+        return $this->value[$offset] ?? null;
     }
 
     public function offsetSet($offset, $value)
     {
-        if ($this->type == 'redis') {
-            $this->client->hSet($this->key(), $offset, $value);
-        } else {
-            $this->client[$this->key()][$offset] = $value;
-        }
+        $this->value[$offset] = $value;
+        $this->toSync();
     }
 
     public function offsetUnset($offset)
     {
-        if ($this->type == 'redis') {
-            $this->client->hDel($this->key(), $offset);
-        } else {
-            if (isset($this[$this->key()][$offset])) {
-                unset($this[$this->key()][$offset]);
-            }
+        if (isset($this->value[$offset])) {
+            unset($this->value[$offset]);
         }
     }
 
@@ -76,7 +60,7 @@ class Status implements \ArrayAccess
         if ($this->type == 'redis') {
             $this->client->del($this->key());
         } else {
-            unset($this[$this->key()]);
+            $this->value = [];
         }
     }
 
@@ -84,6 +68,40 @@ class Status implements \ArrayAccess
     {
         $this->task_id = $task_id;
         return $this;
+    }
+
+    /**
+     * 每100ms同步到redis
+     */
+    public function toSync()
+    {
+        $now = microtime(true) * 1000;
+        if ($now - $this->last_time > 100) {
+            $this->sync();
+            $this->last_time = $now;
+        }
+    }
+
+    /**
+     * 同步到redis
+     */
+    public function sync()
+    {
+        if ($this->client) {
+            $this->client->hMSet($this->key(), $this->value);
+        }
+    }
+
+    public function loadFromRemote($offset = null)
+    {
+        if ($this->client) {
+            if ($offset) {
+                return $this->client->hGet($this->key(), $offset);
+            } else {
+                return $this->client->hGetAll($this->key());
+            }
+        }
+        return null;
     }
 }
 

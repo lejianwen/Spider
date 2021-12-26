@@ -404,7 +404,7 @@ class Spider
                         $data = $this->select($response, $page);
 
                         if (!empty($page['callback'])) {
-                            $page['callback']($data, $url_info['url'], $response, $this);
+                            $page['callback']($data, $url_info, $response, $this);
                         }
                     }
                 }
@@ -540,13 +540,14 @@ class Spider
 
     protected function checkStatus()
     {
-        $next_status = $this->status['next'];
+        $next_status = $this->status->loadFromRemote('next');
         if ($next_status == 'reload') {
             Log::debug('reload');
             if ($this->config['reload_func']) {
                 $this->config['reload_func']($this);
             }
             $this->upTaskStatus('next', '');
+            $this->status->sync();
         } elseif ($next_status == 'exit') {
             Log::debug('exit');
             $this->status->clear();
@@ -583,7 +584,7 @@ class Spider
                 $this->wait_queue->clear();
                 $this->all_queue->clear();
                 $this->addEntries();
-                //等待锁自己过期
+                //等待锁自己过期,如果过快，可能一个进程释放锁，另一个立马就获得了
                 Log::debug('reset success');
             } else {
                 $this->redis->del($nx_key);
@@ -606,6 +607,7 @@ class Spider
             for ($i = 0; $i < $this->config['task_num']; $i++) {
                 $this->status->setTaskId($i);
                 $this->upTaskStatus('next', 'exit');
+                $this->status->sync();
             }
             $this->redis->del($nx_key);
         }
