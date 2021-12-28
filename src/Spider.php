@@ -102,9 +102,7 @@ class Spider
                 } else {
                     $this->task_id = $i;
                     Log::$task_id = $this->task_id;
-                    /*if (!empty($this->config['proxy'])) {
-                        $this->using_proxy_index = array_rand($this->config['proxy']);
-                    }*/
+                    Log::debug('task start~~~');
                     $this->using_proxy_index = $i;
                     $this->status->setTaskId($this->task_id);
                     $this->task();
@@ -584,12 +582,14 @@ class Spider
                 $this->addEntries();
                 //等待锁自己过期,如果过快，可能一个进程释放锁，另一个立马就获得了
                 Log::debug('reset success');
+//                gc_collect_cycles();
             } else {
                 Log::debug('cancel reset, because one running');
                 $this->redis->del($nx_key);
             }
         } else {
             Log::debug('reset waiting');
+//            gc_collect_cycles();
             //等待其他进程重置
             sleep(10);
         }
