@@ -13,7 +13,7 @@ class Spider
     protected $status;
     protected $task_id = 0;
     public $filter_url;
-    protected $using_proxy_index = 0; //使用的代理索引
+    public $using_proxy_index = 0; //使用的代理索引
     public $empty_queue_func;
     /** @var Redis|\Redis $redis */
     protected $redis;
@@ -187,6 +187,11 @@ class Spider
                     continue;
                 }
                 $url_info = $this->urlInfo($url);
+                if (!$url_info) {
+                    //可能已经被清理掉了
+                    sleep(1);
+                    continue;
+                }
                 //使用代理必须重新创建 gz客户端，不然不能在多个代理中切换
                 if (!empty($this->config['proxy'])) {
                     $request = new Request($this->config['guzzle'] ?? []);

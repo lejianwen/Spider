@@ -24,7 +24,6 @@ class Status implements \ArrayAccess
             $this->value = [];
             $this->client = $redis;
         }
-
     }
 
     public function offsetExists($offset)
