@@ -238,8 +238,9 @@ class Spider
             //不在domain中的链接忽略
             return false;
         }
+        if (empty($parse['scheme'])) {
+            //没有协议 则根据referer构建
 
-        if (empty($parse['host']) || empty($parse['scheme'])) {
             if (empty($cur_url)) {
                 return false;
             }
@@ -248,14 +249,32 @@ class Spider
                 return false;
             }
 
-            if (empty($parse['host']) && empty($parse['scheme'])) {
-                //根路径
-                $url = $cur_parse['scheme'] . '://' . $cur_parse['host'] . $url;
-            } elseif (empty($parse['host'])) {
-                //当前路径
-                $url = $cur_url['url'] . $url;
-            } elseif (empty($parse['scheme'])) {
-                // 以 //开头的
+            if (empty($parse['host'])) {
+                $base_uri = $cur_parse['scheme'] . '://' . $cur_parse['host'];
+                // 判断是不是 / 开头
+                if (substr($url, 0, 1) == '/') {
+                    $url = $base_uri . $url;
+                } else {
+                    //修正url层级
+                    $cur_path = $cur_parse['path'] ?? '';
+                    $cur_path_arr = explode('/', ltrim($cur_path, '/'));
+                    array_pop($cur_path_arr);
+                    $url_path_arr = explode('/', str_replace('//', '/', $parse['path']));
+                    $result_arr = array_merge($cur_path_arr, $url_path_arr);
+                    $arr = [];
+                    foreach ($result_arr as $k => $v) {
+                        if ($v == '..') {
+                            array_pop($arr);
+                        } elseif ($v == '.') {
+                            //当前目录不用处理
+                        } else {
+                            $arr[] = $v;
+                        }
+                    }
+                    $url = $base_uri . '/' . implode('/', $arr);
+                }
+            } else {
+                //表示以 // 开头
                 $url = $cur_parse['scheme'] . ':' . $url;
             }
         }
