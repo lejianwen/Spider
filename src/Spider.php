@@ -203,6 +203,7 @@ class Spider
                     $this->response($url_info, $response);
                 } catch (RequestException $e) {
                     $this->logger->debug($e->getMessage());
+                    $this->response($url_info, false);
                 }
 
                 $this->nextStatus();
