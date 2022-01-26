@@ -9,6 +9,7 @@ class Queue implements \Countable
     protected $type;
     /** @var \Redis|mixed|\SplQueue $client */
     protected $client;
+    protected $config;
     protected $redis_key;
 
     public function __construct($redis = null, $redis_key = 'lwf:spider:wait:queue')
@@ -68,7 +69,7 @@ class Queue implements \Countable
     public function clear()
     {
         if ($this->type == 'redis') {
-            $this->client->del($this->redis_key);
+            $this->client->unlink($this->redis_key);
         }
     }
 
@@ -85,5 +86,4 @@ class Queue implements \Countable
     {
         return $this->size();
     }
-
 }

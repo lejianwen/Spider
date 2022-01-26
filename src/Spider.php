@@ -37,6 +37,7 @@ class Spider
             $this->status = new Status();
         }
         $this->html_parse = new HtmlParse();
+        $this->logger = new Log(0, $this->config['log_filename'], $this->config['log_level'], $this->config['log_show']);
     }
 
     public function ready()
@@ -101,8 +102,8 @@ class Spider
                     }
                 } else {
                     $this->task_id = $i;
-                    Log::$task_id = $this->task_id;
-                    Log::debug('task start~~~');
+                    $this->logger->setTaskId($this->task_id);
+                    $this->logger->debug('task start~~~');
                     $this->using_proxy_index = $i;
                     $this->status->setTaskId($this->task_id);
                     $this->task();
@@ -170,7 +171,7 @@ class Spider
             while (1) {
                 $this->checkStatusCmd();
                 if ($this->wait_queue->isEmpty()) {
-                    Log::debug("dequeue null");
+                    $this->logger->debug("dequeue null");
                     $this->upTaskStatus('status', 'empty');
                     sleep(1);
 
@@ -183,7 +184,7 @@ class Spider
                 $url = $this->wait_queue->dequeue();
                 //redis队列可能最后一个已经被别的进程获取
                 if (!$url) {
-                    Log::debug("dequeue null");
+                    $this->logger->debug("dequeue null");
                     continue;
                 }
                 $url_info = $this->urlInfo($url);
@@ -197,8 +198,12 @@ class Spider
                     $request = new Request($this->config['guzzle'] ?? []);
                     $request->setProxy($this->useProxy($url_info));
                 }
-                $response = $request->request($url_info);
-                $this->response($url_info, $response);
+                try {
+                    $response = $request->request($url_info);
+                    $this->response($url_info, $response);
+                } catch (RequestException $e) {
+                    $this->logger->debug($e->getMessage());
+                }
 
                 $this->nextStatus();
                 if (isset($this->config['interval'])) {
@@ -334,7 +339,7 @@ class Spider
 
         $this->all_queue[$url_info['url']] = $url_info;
         $this->wait_queue->enqueue($url_info['url']);
-        Log::debug("add {$url_info['url']} ");
+        $this->logger->debug("add {$url_info['url']} ");
         return true;
     }
 
@@ -369,13 +374,13 @@ class Spider
 
         $this->all_queue[$url_info['url']] = $url_info;
         $this->wait_queue->unshift($url_info['url']);
-        Log::debug("unshift {$url_info['url']} ");
+        $this->logger->debug("unshift {$url_info['url']} ");
         return true;
     }
 
     public function success($url_info)
     {
-        Log::debug("get success {$url_info['url']} ");
+        $this->logger->debug("get success {$url_info['url']} ");
         $url_info['try_num']++;
         $url_info['status'] = 1;
         $this->all_queue[$url_info['url']] = $url_info;
@@ -387,7 +392,7 @@ class Spider
 
     public function fail($url_info)
     {
-        Log::debug("get fail {$url_info['url']} ");
+        $this->logger->debug("get fail {$url_info['url']} ");
         $url_info['try_num']++;
         $url_info['status'] = -1;
         $this->all_queue[$url_info['url']] = $url_info;
@@ -404,7 +409,7 @@ class Spider
             //重试
             if ($url_info['try_num'] < $this->config['max_try_num']) {
                 $this->wait_queue->enqueue($url_info['url']);
-                Log::debug("retry {$url_info['url']} ");
+                $this->logger->debug("retry {$url_info['url']} ");
             }
         } else {
             $this->success($url_info);
@@ -431,7 +436,7 @@ class Spider
                     }
                 }
             } else {
-                Log::debug("get success {$url_info['url']} , but response is empty, retry");
+                $this->logger->debug("get success {$url_info['url']} , but response is empty, retry");
                 //重试
                 if ($url_info['try_num'] < $this->config['max_try_num']) {
                     $this->wait_queue->enqueue($url_info['url']);
@@ -530,12 +535,12 @@ class Spider
                 if ($this->using_proxy_index >= count($this->config['proxy'])) {
                     $this->using_proxy_index = 0;
                 }
-                Log::debug("use proxy {$this->config['proxy'][$this->using_proxy_index]}");
+                $this->logger->debug("use proxy {$this->config['proxy'][$this->using_proxy_index]}");
                 return $this->config['proxy'][$this->using_proxy_index];
             }
             if ($this->config['proxy'] instanceof \Closure) {
                 $proxy = $this->config['proxy']($url_info);
-                Log::debug("use proxy {$proxy}");
+                $this->logger->debug("use proxy {$proxy}");
                 return $proxy;
             }
         }
@@ -555,21 +560,27 @@ class Spider
         $this->config['ask_continue'] = $this->config['ask_continue'] ?? 'continue';
         $this->config['auto_add'] = $this->config['auto_add'] ?? false;
         $this->config['server_id'] = $this->config['server_id'] ?? 1;
-        Log::$show = $this->config['log_show'] ?? false;
-        Log::$filename = $this->config['log_filename'] ?? '';
+        $this->config['log_filename'] = $this->config['log_filename'] ?? '';
+        $this->config['log_level'] = $this->config['log_level'] ?? Log::LEVEL_DEBUG;
+        $this->config['log_show'] = $this->config['log_show'] ?? true;
+        if ($this->logger) {
+            $this->logger->setFilename($this->config['log_filename']);
+            $this->logger->setLevel($this->config['log_level']);
+            $this->logger->setShow($this->config['log_show']);
+        }
     }
 
     protected function checkStatusCmd()
     {
         $next_status = $this->status->getCmd();
         if ($next_status == 'reload') {
-            Log::debug('reload');
+            $this->logger->debug('reload');
             if ($this->config['reload_func']) {
                 $this->config['reload_func']($this);
             }
             $this->status->setCmd('');
         } elseif ($next_status == 'exit') {
-            Log::debug('exit');
+            $this->logger->debug('exit');
             $this->status->clear();
             exit;
         }
@@ -587,7 +598,7 @@ class Spider
      */
     public function reset()
     {
-        Log::debug('ready reset');
+        $this->logger->debug('ready reset');
         $nx_key = 'sp:reset';
         $lock = $this->redis->set($nx_key, 1, ['nx', 'ex' => 5]);
         if ($lock) {
@@ -605,14 +616,14 @@ class Spider
                 $this->all_queue->clear();
                 $this->addEntries();
                 //等待锁自己过期,如果过快，可能一个进程释放锁，另一个立马就获得了
-                Log::debug('reset success');
+                $this->logger->debug('reset success');
 //                gc_collect_cycles();
             } else {
-                Log::debug('cancel reset, because one running');
+                $this->logger->debug('cancel reset, because one running');
                 $this->redis->del($nx_key);
             }
         } else {
-            Log::debug('reset waiting');
+            $this->logger->debug('reset waiting');
 //            gc_collect_cycles();
             //等待其他进程重置
             sleep(10);

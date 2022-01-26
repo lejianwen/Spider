@@ -7,7 +7,7 @@ namespace Ljw\Spider;
 class AllQueue implements \ArrayAccess, \Countable
 {
     protected $type;
-    /** @var Redis|\Redis|array client */
+    /** @var Redis|\Redis|array $client */
     protected $client;
     protected $redis_key;
 
@@ -67,7 +67,7 @@ class AllQueue implements \ArrayAccess, \Countable
     public function clear()
     {
         if ($this->type == 'redis') {
-            $this->client->del($this->redis_key);
+            $this->client->unlink($this->redis_key);
         }
     }
 

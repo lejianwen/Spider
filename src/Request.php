@@ -46,8 +46,7 @@ class Request
             }
             return $this->convertResponse($response->getBody()->getContents(), $charset);
         } catch (\GuzzleHttp\Exception\GuzzleException $e) {
-            Log::debug("get fail {$url['url']} by proxy {$this->proxy} " . $e->getMessage());
-            return false;
+            throw new RequestException("get fail {$url['url']} by proxy {$this->proxy} " . $e->getMessage(), $e->getCode(), $e);
         }
     }
 
