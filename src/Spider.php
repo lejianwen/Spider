@@ -2,7 +2,6 @@
 
 namespace Ljw\Spider;
 
-
 class Spider
 {
     protected $wait_queue;
@@ -17,6 +16,7 @@ class Spider
     public $empty_queue_func;
     /** @var Redis|\Redis $redis */
     protected $redis;
+    protected $logger;
 
     public function __construct($config)
     {
@@ -530,22 +530,21 @@ class Spider
 
     public function useProxy($url_info = null)
     {
+        $proxy = null;
         if (!empty($this->config['proxy'])) {
             if (is_array($this->config['proxy'])) {
                 $this->using_proxy_index++;
                 if ($this->using_proxy_index >= count($this->config['proxy'])) {
                     $this->using_proxy_index = 0;
                 }
-                $this->logger->debug("use proxy {$this->config['proxy'][$this->using_proxy_index]}");
-                return $this->config['proxy'][$this->using_proxy_index];
+                $proxy = $this->config['proxy'][$this->using_proxy_index];
             }
             if ($this->config['proxy'] instanceof \Closure) {
                 $proxy = $this->config['proxy']($url_info);
-                $this->logger->debug("use proxy {$proxy}");
-                return $proxy;
             }
+            $this->logger->debug("use proxy {$proxy} " . (!empty($_SERVER['HTTP_HOST']) ? ($_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']) : 'PHP-CLI'));
         }
-        return null;
+        return $proxy;
     }
 
     public function getConfig()
@@ -564,6 +563,7 @@ class Spider
         $this->config['log_filename'] = $this->config['log_filename'] ?? '';
         $this->config['log_level'] = $this->config['log_level'] ?? Log::LEVEL_DEBUG;
         $this->config['log_show'] = $this->config['log_show'] ?? true;
+
         if ($this->logger) {
             $this->logger->setFilename($this->config['log_filename']);
             $this->logger->setLevel($this->config['log_level']);
@@ -645,5 +645,10 @@ class Spider
             }
             $this->redis->del($nx_key);
         }
+    }
+
+    public function logger()
+    {
+        return $this->logger;
     }
 }
