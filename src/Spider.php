@@ -600,6 +600,14 @@ class Spider
     public function reset()
     {
         $this->logger->debug('ready reset');
+
+        if (!$this->redis) {
+            $this->wait_queue->clear();
+            $this->all_queue->clear();
+            $this->addEntries();
+            return;
+        }
+        
         $nx_key = 'sp:reset';
         $lock = $this->redis->set($nx_key, 1, ['nx', 'ex' => 5]);
         if ($lock) {
