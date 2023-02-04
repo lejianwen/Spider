@@ -20,7 +20,7 @@ $config = [
     'max_depth' => 0,
     'task_num' => 1, //
     'log_filename' => 'spider.log',
-    'log_level' => 1, //日志等级
+    'log_level' => Ljw\Spider\Log::LEVEL_DEBUG, //日志等级
 //            'log_show' => 1, //是否输出日志到控制台
 //            'multi_num' => 5, //guzzle 并发请求,开启多任务时不建议开启
     'interval' => [500, 1200], //请求间隔，一个数字 或者 数组指定最小最大间隔， 单位毫秒
@@ -52,7 +52,7 @@ $config = [
             'url' => 'http://www.ibookv.com/book/\d+\.html',
             'selector' => '//*[contains(@class,"book-info")]//h1',
             'only_one' => 1,
-            'callback' => function ($data, $html) {
+            'callback' => function ($data, $url_info, $html, $spider) {
 //                        var_dump($data);
             }
         ],
@@ -87,7 +87,7 @@ $config = [
                 ],
             ],
             'only_one' => 1,
-            'callback' => function ($data, $html) {
+            'callback' => function ($data, $url_info, $html, $spider) {
 //                var_dump($data);
             }
         ],
@@ -95,7 +95,7 @@ $config = [
             'url' => 'http://www.ibookv.com/category/\d+\.html',
             'selector_type' => 'regex',
             'selector' => '%<li ><a href=".*?">(.*?)</a></li>%i',
-            'callback' => function ($data, $html) {
+            'callback' => function ($data, $url_info, $html, $spider) {
 //                        var_dump($data);
             }
         ]

@@ -68,6 +68,8 @@ class AllQueue implements \ArrayAccess, \Countable
     {
         if ($this->type == 'redis') {
             $this->client->unlink($this->redis_key);
+        } else {
+            $this->client = [];
         }
     }
 
