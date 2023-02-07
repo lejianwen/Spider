@@ -461,8 +461,8 @@ class Spider
     {
         $data = [];
         if (is_array($selector['selector'])) {
-            foreach ($selector['selector'] as $selector) {
-                $data[$selector['name']] = $this->select($html, $selector);
+            foreach ($selector['selector'] as $_selector) {
+                $data[$_selector['name']] = $this->select($html, $_selector);
             }
         } else {
             $only_one = $selector['only_one'] ?? false;
